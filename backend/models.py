@@ -2,6 +2,7 @@ from database import Base
 from sqlalchemy import Column, Integer, String
 from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy import Enum
+from sqlalchemy import Column, Integer, String, ForeignKey, Enum, DateTime, Date
 
 class Birim(Base):
     __tablename__ = "birim"
@@ -28,3 +29,31 @@ class Personel(Base):
     servis_no= Column(String(60))
 
 
+class Kayit(Base):
+    __tablename__ = "kayit"
+
+    kayit_id = Column(Integer, primary_key=True)
+    sicil_no = Column(String(30), ForeignKey("personel.sicil_no"), nullable=False)
+    bant_no = Column(Integer, ForeignKey("bant.bant_no"), nullable=False)
+    giris_saati = Column(DateTime, nullable=False)
+    cikis_saati = Column(DateTime)
+
+
+class Ek_Mesai(Base):
+    __tablename__ = "ek_mesai"
+
+    ek_mesai_id = Column(Integer, primary_key=True)
+    sicil_no = Column(String(30), ForeignKey("personel.sicil_no"), nullable=False)
+    baslangic_saati = Column(DateTime, nullable=False)
+    bitis_saati = Column(DateTime)
+
+
+class Gunluk_Arsiv(Base):
+    __tablename__ = "gunluk_arsiv"
+
+    arsiv_id = Column(Integer, primary_key=True)
+    sicil_no = Column(String(30), ForeignKey("personel.sicil_no"), nullable=False)
+    bant_no = Column(Integer, ForeignKey("bant.bant_no"), nullable=False)
+    tarih = Column(Date)
+    giris_saati = Column(DateTime)
+    cikis_saati = Column(DateTime)
