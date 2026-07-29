@@ -11,7 +11,8 @@ from schemas import (
     BantCreate , BantOut,
     PersonelCreate, PersonelOut,
     KayitCreate, KayitOut,
-    EkMesaiCreate, EkMesaiOut
+    EkMesaiCreate, EkMesaiOut,
+    PersonelSicilNo
     )
 
 app = FastAPI()
@@ -156,7 +157,18 @@ def ek_mesai_ekle(ek_mesai: EkMesaiCreate, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(yeni_mesai)
         return yeni_mesai
+    
+@app.patch("/personel/aktif", response_model=PersonelOut)
+def personel_aktif_degistir(veri: PersonelSicilNo, db: Session = Depends(get_db)):
+    personel = db.query(Personel).filter(Personel.sicil_no == veri.sicil_no).first()
 
+    if personel is None:
+        raise HTTPException(status_code=404, detail="Personel bulunamadı")
+
+    personel.aktif = not personel.aktif
+    db.commit()
+    db.refresh(personel)
+    return personel
 
 
 @app.get("/birim", response_model=list[BirimOut])

@@ -1,5 +1,5 @@
 from database import Base
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String , Boolean
 from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy import Enum
 from sqlalchemy import Column, Integer, String, ForeignKey, Enum, DateTime, Date
@@ -27,6 +27,7 @@ class Personel(Base):
     rol = Column(Enum("calisan","bant_sefi","yonetici",name="rol_turu"),nullable=False)
     sifre_hash = Column(String(60),nullable=False)
     servis_no= Column(String(60))
+    aktif = Column(Boolean, nullable=False, default=False)
 
 
 class Kayit(Base):
