@@ -24,6 +24,8 @@ class KayitCreate(BaseModel):
     sicil_no: str
     bant_no: int
 
+class EkMesaiCreate(BaseModel):
+    sicil_no: str
 
 
 
@@ -62,3 +64,12 @@ class KayitOut(BaseModel):
 
     class Config:
         from_attributes = True 
+
+class EkMesaiOut(BaseModel):
+    ek_mesai_id: int
+    sicil_no: str
+    baslangic_saati: datetime
+    bitis_saati: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True

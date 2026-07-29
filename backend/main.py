@@ -4,15 +4,18 @@ from database import SessionLocal
 from fastapi import HTTPException
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
-from models import Birim , Bant , Personel , Kayit
+from apscheduler.schedulers.background import BackgroundScheduler
+from models import Birim , Bant , Personel , Kayit ,Ek_Mesai
 from schemas import (
     BirimCreate, BirimOut ,
     BantCreate , BantOut,
     PersonelCreate, PersonelOut,
     KayitCreate, KayitOut,
+    EkMesaiCreate, EkMesaiOut
     )
 
 app = FastAPI()
+
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -23,6 +26,23 @@ def get_db():
         yield db #normal return'den farkı: fonksiyon yield satırında duraklar, değeri dışarı verir, çağıran taraf işini bitirince fonksiyona geri döner ve kalan kodu çalıştırır.
     finally:
         db.close()
+
+def gun_sonu_kapat():
+    db = SessionLocal()
+    try:
+        aktif_kayitlar = db.query(Kayit).filter(Kayit.cikis_saati == None).all()
+
+        for kayit in aktif_kayitlar:
+            kayit.cikis_saati = datetime.now().replace(hour=17, minute=0, second=0, microsecond=0)
+
+        db.commit()
+    finally:
+        db.close()
+
+scheduler = BackgroundScheduler()
+scheduler.add_job(gun_sonu_kapat, "cron", hour=17, minute=00)
+scheduler.start()
+
 
 
 @app.post("/birim", response_model=BirimOut)
@@ -65,20 +85,27 @@ def personel_ekle(personel: PersonelCreate, db: Session = Depends(get_db)):
 @app.post("/kayit", response_model=KayitOut)
 def kayit_ekle(kayit: KayitCreate, db: Session = Depends(get_db)):
 
-    #Personel herhangi bir bantta aktif mi
-
     aktif_kayit = db.query(Kayit).filter(
         Kayit.sicil_no == kayit.sicil_no,
         Kayit.cikis_saati == None
     ).first()
 
-    if aktif_kayit is not None and aktif_kayit.bant_no==kayit.bant_no:
-        raise HTTPException(
-            status_code=400,
-            detail="Bu kayıt alındı"
-        )
-    elif aktif_kayit is not None and aktif_kayit.bant_no!=kayit.bant_no:
-        aktif_kayit.cikis_saati=datetime.now()
+    if aktif_kayit is not None and aktif_kayit.bant_no == kayit.bant_no:
+        gecen_sure = datetime.now() - aktif_kayit.giris_saati
+
+        if gecen_sure < timedelta(minutes=5):
+            raise HTTPException(
+                status_code=400,
+                detail="Bu personel bantta kısa süre önce okutuldu,yanlış okutma."
+            )
+        else:
+            aktif_kayit.cikis_saati = datetime.now()
+            db.commit()
+            db.refresh(aktif_kayit)
+            return aktif_kayit
+
+    elif aktif_kayit is not None and aktif_kayit.bant_no != kayit.bant_no:
+        aktif_kayit.cikis_saati = datetime.now()
         yeni_kayit = Kayit(
             sicil_no=kayit.sicil_no,
             bant_no=kayit.bant_no,
@@ -88,6 +115,7 @@ def kayit_ekle(kayit: KayitCreate, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(yeni_kayit)
         return yeni_kayit
+
     else:
         yeni_kayit = Kayit(
             sicil_no=kayit.sicil_no,
@@ -98,6 +126,36 @@ def kayit_ekle(kayit: KayitCreate, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(yeni_kayit)
         return yeni_kayit
+
+
+@app.post("/ek-mesai", response_model=EkMesaiOut)
+def ek_mesai_ekle(ek_mesai: EkMesaiCreate, db: Session = Depends(get_db)):
+    aktif_mesai = db.query(Ek_Mesai).filter(
+        Ek_Mesai.sicil_no == ek_mesai.sicil_no,
+        Ek_Mesai.bitis_saati == None
+    ).first()
+
+    if aktif_mesai is not None:
+        gecen_sure = datetime.now() - aktif_mesai.baslangic_saati
+        if gecen_sure < timedelta(minutes=5):
+            raise HTTPException(
+                status_code=400,
+                detail="Bu personel kısa süre önce mesaiye başladı, yanlış okutma."
+            )
+        else:
+            aktif_mesai.bitis_saati = datetime.now()
+            db.commit()
+            db.refresh(aktif_mesai)
+            return aktif_mesai
+    else:
+        yeni_mesai = Ek_Mesai(
+            sicil_no=ek_mesai.sicil_no,
+            baslangic_saati=datetime.now(),
+        )
+        db.add(yeni_mesai)
+        db.commit()
+        db.refresh(yeni_mesai)
+        return yeni_mesai
 
 
 
@@ -119,3 +177,8 @@ def personel_listele(db: Session = Depends(get_db)):
 @app.get("/kayit", response_model=list[KayitOut])
 def kayit_listele(db: Session = Depends(get_db)):
     return db.query(Kayit).all()
+
+
+@app.get("/ek-mesai", response_model=list[EkMesaiOut])
+def ek_mesai_listele(db: Session = Depends(get_db)):
+    return db.query(Ek_Mesai).all()
