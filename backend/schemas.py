@@ -1,5 +1,7 @@
 from pydantic import BaseModel
 from typing import Optional
+from datetime import datetime
+
 
 
 class BirimCreate(BaseModel):
@@ -17,6 +19,12 @@ class PersonelCreate(BaseModel):
     rol: str
     sifre: str
     servis_no: Optional[str] = None
+
+class KayitCreate(BaseModel):
+    sicil_no: str
+    bant_no: int
+
+
 
 
 class BirimOut(BaseModel):
@@ -44,3 +52,13 @@ class PersonelOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+class KayitOut(BaseModel):
+    kayit_id: int
+    sicil_no: str
+    bant_no: int
+    giris_saati: datetime
+    cikis_saati: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True 

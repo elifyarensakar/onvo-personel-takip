@@ -3,11 +3,13 @@ from sqlalchemy.orm import Session
 from database import SessionLocal
 from fastapi import HTTPException
 from passlib.context import CryptContext
-from models import Birim , Bant , Personel
+from datetime import datetime, timedelta
+from models import Birim , Bant , Personel , Kayit
 from schemas import (
     BirimCreate, BirimOut ,
     BantCreate , BantOut,
-    PersonelCreate, PersonelOut
+    PersonelCreate, PersonelOut,
+    KayitCreate, KayitOut,
     )
 
 app = FastAPI()
@@ -60,6 +62,42 @@ def personel_ekle(personel: PersonelCreate, db: Session = Depends(get_db)):
     db.refresh(yeni_personel)
     return yeni_personel
 
+@app.post("/kayit", response_model=KayitOut)
+def kayit_ekle(kayit: KayitCreate, db: Session = Depends(get_db)):
+
+    #Personel herhangi bir bantta aktif mi
+
+    aktif_kayit = db.query(Kayit).filter(
+        Kayit.sicil_no == kayit.sicil_no,
+        Kayit.cikis_saati == None
+    ).first()
+
+    if aktif_kayit is not None and aktif_kayit.bant_no==kayit.bant_no:
+        raise HTTPException(
+            status_code=400,
+            detail="Bu kayıt alındı"
+        )
+    elif aktif_kayit is not None and aktif_kayit.bant_no!=kayit.bant_no:
+        aktif_kayit.cikis_saati=datetime.now()
+        yeni_kayit = Kayit(
+            sicil_no=kayit.sicil_no,
+            bant_no=kayit.bant_no,
+            giris_saati=datetime.now(),
+        )
+        db.add(yeni_kayit)
+        db.commit()
+        db.refresh(yeni_kayit)
+        return yeni_kayit
+    else:
+        yeni_kayit = Kayit(
+            sicil_no=kayit.sicil_no,
+            bant_no=kayit.bant_no,
+            giris_saati=datetime.now(),
+        )
+        db.add(yeni_kayit)
+        db.commit()
+        db.refresh(yeni_kayit)
+        return yeni_kayit
 
 
 
@@ -77,3 +115,7 @@ def bant_listele(db: Session = Depends(get_db)):
 @app.get("/personel", response_model=list[PersonelOut])
 def personel_listele(db: Session = Depends(get_db)):
     return db.query(Personel).all()
+
+@app.get("/kayit", response_model=list[KayitOut])
+def kayit_listele(db: Session = Depends(get_db)):
+    return db.query(Kayit).all()
