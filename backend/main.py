@@ -1,5 +1,5 @@
 from fastapi import FastAPI , Depends
-from auth import token_olustur, get_current_user
+from auth import token_olustur, get_current_user, rol_filtreleme
 from sqlalchemy.orm import Session
 from database import SessionLocal
 from fastapi import HTTPException
@@ -49,7 +49,7 @@ scheduler.start()
 
 
 @app.post("/birim", response_model=BirimOut)
-def birim_ekle(birim: BirimCreate, db: Session = Depends(get_db)):
+def birim_ekle(birim: BirimCreate, db: Session = Depends(get_db),kullanici: dict = Depends(rol_filtreleme(["yonetici"]))):
     yeni_birim = Birim(birim_adi=birim.birim_adi)
     db.add(yeni_birim)
     db.commit()
@@ -57,7 +57,7 @@ def birim_ekle(birim: BirimCreate, db: Session = Depends(get_db)):
     return yeni_birim
 
 @app.post("/bant", response_model=BantOut)
-def bant_ekle(bant: BantCreate, db: Session = Depends(get_db)):
+def bant_ekle(bant: BantCreate, db: Session = Depends(get_db),kullanici: dict = Depends(rol_filtreleme(["yonetici"]))):
     yeni_bant = Bant(birim_no=bant.birim_no,bant_adi=bant.bant_adi)
     db.add(yeni_bant)
     db.commit()
@@ -65,7 +65,7 @@ def bant_ekle(bant: BantCreate, db: Session = Depends(get_db)):
     return yeni_bant
 
 @app.post("/personel", response_model=PersonelOut)
-def personel_ekle(personel: PersonelCreate, db: Session = Depends(get_db)):
+def personel_ekle(personel: PersonelCreate, db: Session = Depends(get_db),kullanici: dict = Depends(rol_filtreleme(["yonetici"]))):
     if personel.rol != "calisan" and personel.birim_no is None:
         raise HTTPException(
             status_code=400,
@@ -86,7 +86,7 @@ def personel_ekle(personel: PersonelCreate, db: Session = Depends(get_db)):
     return yeni_personel
 
 @app.post("/kayit", response_model=KayitOut)
-def kayit_ekle(kayit: KayitCreate, db: Session = Depends(get_db)):
+def kayit_ekle(kayit: KayitCreate, db: Session = Depends(get_db),kullanici: dict = Depends(rol_filtreleme(["yonetici","bant_sefi"]))):
 
     aktif_kayit = db.query(Kayit).filter(
         Kayit.sicil_no == kayit.sicil_no,
@@ -132,14 +132,14 @@ def kayit_ekle(kayit: KayitCreate, db: Session = Depends(get_db)):
 
 
 @app.post("/ek-mesai", response_model=EkMesaiOut)
-def ek_mesai_ekle(ek_mesai: EkMesaiCreate, db: Session = Depends(get_db)):
+def ek_mesai_ekle(ek_mesai: EkMesaiCreate, db: Session = Depends(get_db),kullanici: dict = Depends(rol_filtreleme(["yonetici","bant_sefi"]))):
     aktif_mesai = db.query(Ek_Mesai).filter(
         Ek_Mesai.sicil_no == ek_mesai.sicil_no,
         Ek_Mesai.bitis_saati == None
     ).first()
 
     if aktif_mesai is not None:
-        gecen_sure = datetime.now() - aktif_mesai.baslangic_saati
+        gecen_sure = datetime.now() - aktif_mesai.baslangic_saati   
         if gecen_sure < timedelta(minutes=5):
             raise HTTPException(
                 status_code=400,
@@ -172,7 +172,7 @@ def login(veri: LoginRequest, db: Session = Depends(get_db)):
     elif personel.aktif==False:
         raise HTTPException(status_code=403, detail= "Sicil no hatalı")
     else:
-        token = token_olustur({"sicil_no": personel.sicil_no, "rol": personel.rol})
+        token = token_olustur({"sicil_no": personel.sicil_no, "rol": personel.rol , "birim_no":personel.birim_no})
         return {"access_token": token, "token_type": "bearer"}
 
    
@@ -192,32 +192,33 @@ def personel_aktif_degistir(veri: PersonelSicilNo, db: Session = Depends(get_db)
         return personel
 
 
-
-    
-    
-
-
 @app.get("/birim", response_model=list[BirimOut])
-def birim_listele(db: Session = Depends(get_db)):
+def birim_listele(db: Session = Depends(get_db),kullanici: dict = Depends(rol_filtreleme(["bant_sefi", "yonetici"]))):
     return db.query(Birim).all()
 
 
 
 @app.get("/bant", response_model=list[BantOut])
-def bant_listele(db: Session = Depends(get_db)):
-    return db.query(Bant).all()
+def bant_listele(db: Session = Depends(get_db),kullanici: dict = Depends(rol_filtreleme(["bant_sefi", "yonetici"]))): 
+    if kullanici["rol"]=="yonetici": 
+        return db.query(Bant).all()
+    elif kullanici["rol"] == "bant_sefi":
+        return db.query(Bant).filter(Bant.birim_no == kullanici["birim_no"]).all()
 
 
 @app.get("/personel", response_model=list[PersonelOut])
-def personel_listele(db: Session = Depends(get_db)):
-    return db.query(Personel).all()
+def personel_listele(db: Session = Depends(get_db) ,kullanici: dict = Depends(rol_filtreleme(["bant_sefi", "yonetici"]))):
+    if kullanici["rol"]=="yonetici": 
+        return db.query(Personel).all()
+    elif kullanici["rol"] == "bant_sefi":
+        return db.query(Personel).filter(Personel.birim_no == kullanici["birim_no"]).all()
 
 @app.get("/kayit", response_model=list[KayitOut])
-def kayit_listele(db: Session = Depends(get_db)):
+def kayit_listele(db: Session = Depends(get_db),kullanici: dict = Depends(rol_filtreleme(["yonetici"]))):
     return db.query(Kayit).all()
 
 
 @app.get("/ek-mesai", response_model=list[EkMesaiOut])
-def ek_mesai_listele(db: Session = Depends(get_db)):
+def ek_mesai_listele(db: Session = Depends(get_db),kullanici: dict = Depends(rol_filtreleme(["yonetici"]))):
     return db.query(Ek_Mesai).all()
 

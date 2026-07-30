@@ -1,10 +1,12 @@
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
+from pydantic import BaseModel, Field
 
 class LoginRequest(BaseModel):
     sicil_no: str
     sifre: str
+ 
 
     
 class PersonelSicilNo(BaseModel):
@@ -23,7 +25,7 @@ class PersonelCreate(BaseModel):
     ad_soyad: str
     birim_no: Optional[int] = None
     rol: str
-    sifre: str
+    sifre: str = Field(min_length=8, max_length=16)
     servis_no: Optional[str] = None
 
 class KayitCreate(BaseModel):

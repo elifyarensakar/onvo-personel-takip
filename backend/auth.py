@@ -36,3 +36,11 @@ def token_olustur(veri: dict):
 
 def token_dogrula(token: str):
     return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+
+
+def rol_filtreleme(izinli_roller: list):
+    def kontrol(kullanici: dict = Depends(get_current_user)):
+        if kullanici["rol"] not in izinli_roller:
+            raise HTTPException(403, "Yetkiniz yok")
+        return kullanici
+    return kontrol
