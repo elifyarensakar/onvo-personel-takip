@@ -2,6 +2,11 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 
+class LoginRequest(BaseModel):
+    sicil_no: str
+    sifre: str
+
+    
 class PersonelSicilNo(BaseModel):
     sicil_no: str
 

@@ -1,4 +1,5 @@
 from fastapi import FastAPI , Depends
+from auth import token_olustur, get_current_user
 from sqlalchemy.orm import Session
 from database import SessionLocal
 from fastapi import HTTPException
@@ -12,7 +13,8 @@ from schemas import (
     PersonelCreate, PersonelOut,
     KayitCreate, KayitOut,
     EkMesaiCreate, EkMesaiOut,
-    PersonelSicilNo
+    PersonelSicilNo,
+    LoginRequest
     )
 
 app = FastAPI()
@@ -157,18 +159,42 @@ def ek_mesai_ekle(ek_mesai: EkMesaiCreate, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(yeni_mesai)
         return yeni_mesai
-    
+
+@app.post("/login")
+def login(veri: LoginRequest, db: Session = Depends(get_db)):
+    personel = db.query(Personel).filter(Personel.sicil_no == veri.sicil_no).first()
+
+    if personel is None:
+        raise HTTPException(status_code=401, detail="Sicil no veya şifre hatalı")
+
+    if pwd_context.verify(veri.sifre,personel.sifre_hash) == False:
+        raise HTTPException(status_code=401, detail= "Şifre Hatalı")
+    elif personel.aktif==False:
+        raise HTTPException(status_code=403, detail= "Sicil no hatalı")
+    else:
+        token = token_olustur({"sicil_no": personel.sicil_no, "rol": personel.rol})
+        return {"access_token": token, "token_type": "bearer"}
+
+   
 @app.patch("/personel/aktif", response_model=PersonelOut)
-def personel_aktif_degistir(veri: PersonelSicilNo, db: Session = Depends(get_db)):
+def personel_aktif_degistir(veri: PersonelSicilNo, db: Session = Depends(get_db),kullanici: dict = Depends(get_current_user)):
     personel = db.query(Personel).filter(Personel.sicil_no == veri.sicil_no).first()
 
     if personel is None:
         raise HTTPException(status_code=404, detail="Personel bulunamadı")
+    
+    if kullanici["rol"]=="calisan":
+        raise HTTPException(status_code=403, detail="Bu işlem için yetkiniz yok")
+    else:
+        personel.aktif = not personel.aktif
+        db.commit()
+        db.refresh(personel)
+        return personel
 
-    personel.aktif = not personel.aktif
-    db.commit()
-    db.refresh(personel)
-    return personel
+
+
+    
+    
 
 
 @app.get("/birim", response_model=list[BirimOut])
@@ -194,3 +220,4 @@ def kayit_listele(db: Session = Depends(get_db)):
 @app.get("/ek-mesai", response_model=list[EkMesaiOut])
 def ek_mesai_listele(db: Session = Depends(get_db)):
     return db.query(Ek_Mesai).all()
+
