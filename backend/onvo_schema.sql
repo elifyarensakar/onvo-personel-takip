@@ -22,6 +22,7 @@ CREATE TABLE Personel (
     rol rol_turu NOT NULL,
     sifre_hash VARCHAR(60) NOT NULL,
     servis_no VARCHAR(60),
+    aktif BOOLEAN NOT NULL DEFAULT TRUE,
     CHECK (rol = 'calisan' OR birim_no IS NOT NULL)
 );
 

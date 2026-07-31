@@ -17,3 +17,5 @@ DATABASE_URL = f"postgresql://{db_user}:{db_password}@{host}:{port}/{db_name}"
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base() #Base class üretir.Bu python sınıfı bir veritabanı tablosunu temsil eder.
+
+
