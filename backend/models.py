@@ -28,6 +28,7 @@ class Personel(Base):
     sifre_hash = Column(String(60),nullable=False)
     servis_no= Column(String(60))
     aktif = Column(Boolean, nullable=False, default=True)
+    email = Column(String(255), nullable=True)
 
 
 class Kayit(Base):
@@ -59,3 +60,14 @@ class Gunluk_Arsiv(Base):
     tarih = Column(Date)
     giris_saati = Column(DateTime)
     cikis_saati = Column(DateTime)
+
+
+class Ek_Mesai_Arsiv(Base):
+    __tablename__ = "ek_mesai_arsiv"
+
+    ek_mesai_arsiv_id = Column(Integer, primary_key=True, index=True)
+    sicil_no = Column(String, ForeignKey("personel.sicil_no"), nullable=False)
+    birim_no = Column(Integer, ForeignKey("birim.birim_no"), nullable=False)
+    tarih = Column(Date, nullable=False)
+    baslangic_saati = Column(DateTime, nullable=False)
+    bitis_saati = Column(DateTime, nullable=True)

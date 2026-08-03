@@ -1,5 +1,6 @@
 CREATE SCHEMA public;
 CREATE TYPE rol_turu AS ENUM ('calisan', 'bant_sefi', 'yonetici');
+ALTER TABLE Personel ADD COLUMN email VARCHAR(255);
 
 
 CREATE TABLE Birim (
@@ -49,4 +50,12 @@ CREATE TABLE Gunluk_Arsiv (
     tarih DATE,
     giris_saati TIMESTAMP,
     cikis_saati TIMESTAMP
+);
+CREATE TABLE Ek_Mesai_Arsiv (
+    ek_mesai_arsiv_id SERIAL PRIMARY KEY,
+    sicil_no VARCHAR(20) NOT NULL REFERENCES Personel(sicil_no),
+    birim_no INTEGER NOT NULL REFERENCES Birim(birim_no) ON DELETE RESTRICT,
+    tarih DATE NOT NULL,
+    baslangic_saati TIMESTAMP NOT NULL,
+    bitis_saati TIMESTAMP
 );
