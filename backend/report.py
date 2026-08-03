@@ -67,6 +67,8 @@ def excel_dosyalari_olustur(db, hedef_birim, birim_adi, hedef_tarih):
     kayit_df.to_excel(kayit_dosya_adi, index=False)
     ek_mesai_df.to_excel(ek_mesai_dosya_adi, index=False)
 
+    excel_bicimlendir(kayit_dosya_adi)
+    excel_bicimlendir(ek_mesai_dosya_adi)
     return kayit_dosya_adi, ek_mesai_dosya_adi
 
 def excel_bicimlendir(dosya_adi):
@@ -83,3 +85,6 @@ def excel_bicimlendir(dosya_adi):
         max_uzunluk = max(len(str(hucre.value)) for hucre in sutun if hucre.value is not None)
         sutun_harfi = sutun[0].column_letter
         ws.column_dimensions[sutun_harfi].width = max_uzunluk + 2
+
+    wb.save(dosya_adi)
+   
