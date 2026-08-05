@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../widgets/onvo_primary_button.dart';
 import '../widgets/onvo_text_field.dart';
+import 'admin_panel_screen.dart';
 import 'forgot_password_screen.dart';
+import 'home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -43,11 +45,25 @@ class _LoginScreenState extends State<LoginScreen> {
     // TODO: gerçek kimlik doğrulama servisine bağlanınca burası
     // sicil no + şifreyi backend'e gönderip JWT alacak şekilde
     // değiştirilecek. Birim bilgisi backend tarafında sicil no'dan
-    // çözülüyor, bu yüzden burada ayrı bir birim seçimi yok.
+    // çözülüyor, bu yüzden burada ayrı bir birim seçimi yok. JWT/login
+    // cevabı ayrıca kullanıcının `rol` bilgisini de dönecek — yönetici
+    // ise admin paneline, değilse (bant şefi) QR/istatistik ana sayfasına
+    // yönlendirilecek.
     await Future.delayed(const Duration(milliseconds: 1400));
 
     if (!mounted) return;
     setState(() => _isLoading = false);
+
+    // Demo amaçlı rol tespiti — backend bağlanınca kaldırılacak. Test
+    // etmek için sicil no alanına "9999" ile başlayan bir değer girin.
+    final isYonetici = _sicilController.text.trim().startsWith('9999');
+
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) =>
+            isYonetici ? const AdminPanelScreen() : const HomeScreen(),
+      ),
+    );
   }
 
   @override
@@ -160,7 +176,7 @@ class _BrandHeader extends StatelessWidget {
           // zemin üzerinde okunması için marka mavisine boyanmış hali.
           Image.asset(
             'assets/images/onvo_logo_blue.png',
-            width: 300,
+            width: 176,
             fit: BoxFit.contain,
           ),
           const SizedBox(height: 8),
@@ -210,9 +226,14 @@ class _LoginForm extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
+          Text(
+            'VARDİYA GİRİŞİ',
+            style: AppText.eyebrow,
+            textAlign: TextAlign.center,
+          ),
           const SizedBox(height: 6),
           Text(
-            'Hoş Geldiniz',
+            'Hoş geldiniz',
             style: AppText.h1,
             textAlign: TextAlign.center,
           ),

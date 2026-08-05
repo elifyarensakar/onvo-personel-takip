@@ -1,0 +1,948 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+backend/
+  archive.py
+  auth.py
+  database.py
+  mail.py
+  main.py
+  models.py
+  onvo_schema.sql
+  report.py
+  schemas.py
+  seed_admin.py
+  test_archive.py
+  test_mail.py
+  test_rapor.py
+  test_reset.py
+.gitignore
+Onvo-Uretim-Personel-Takip-TODO.md
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="Onvo-Uretim-Personel-Takip-TODO.md">
+
+</file>
+
+<file path="backend/archive.py">
+from models import Kayit, Gunluk_Arsiv, Ek_Mesai, Ek_Mesai_Arsiv
+from sqlalchemy import func
+
+
+def kayit_arsivle(db, hedef_tarih):
+    """
+
+    Kayit tablosundaki hedef_tarih'e ait satırları Gunluk_Arsiv'e kopyalar.
+   
+    """
+    kayitlar = db.query(Kayit).filter(
+        func.date(Kayit.giris_saati) == hedef_tarih
+    ).all()
+
+    for k in kayitlar:
+        db.add(Gunluk_Arsiv(
+            sicil_no=k.sicil_no,
+            bant_no=k.bant_no,
+            tarih=hedef_tarih,
+            giris_saati=k.giris_saati,
+            cikis_saati=k.cikis_saati,
+        ))
+
+    db.commit()
+    return len(kayitlar)
+
+
+def ek_mesai_arsivle(db, hedef_tarih):
+    """
+
+    Ek_Mesai tablosundaki hedef_tarih'e ait satırları Ek_Mesai_Arsiv'e kopyalar.
+    
+    """
+    kayitlar = db.query(Ek_Mesai).filter(
+        func.date(Ek_Mesai.baslangic_saati) == hedef_tarih
+    ).all()
+
+    for k in kayitlar:
+        db.add(Ek_Mesai_Arsiv(
+            sicil_no=k.sicil_no,
+            birim_no=k.birim_no,
+            tarih=hedef_tarih,
+            baslangic_saati=k.baslangic_saati,
+            bitis_saati=k.bitis_saati,
+        ))
+
+    db.commit()
+    return len(kayitlar)
+
+def kayit_sifirla(db, hedef_tarih):
+    """
+    Kayit tablosundaki hedef_tarih'e ait satırları siler.
+    """
+    kayitlar = db.query(Kayit).filter(
+        func.date(Kayit.giris_saati) == hedef_tarih
+    ).all()
+
+    for k in kayitlar:
+        db.delete(k)
+
+    db.commit()
+    return len(kayitlar)
+
+
+def ek_mesai_sifirla(db, hedef_tarih):
+    """
+    Ek_Mesai tablosundaki hedef_tarih'e ait satırları siler.
+  
+    """
+    kayitlar = db.query(Ek_Mesai).filter(
+        func.date(Ek_Mesai.baslangic_saati) == hedef_tarih
+    ).all()
+
+    for k in kayitlar:
+        db.delete(k)
+
+    db.commit()
+    return len(kayitlar)
+</file>
+
+<file path="backend/mail.py">
+import os
+import smtplib
+from email.message import EmailMessage
+from pathlib import Path
+from dotenv import load_dotenv
+from models import Personel
+
+load_dotenv(dotenv_path=Path(__file__).parent / ".env")
+
+SMTP_HOST = os.getenv("SMTP_HOST")
+SMTP_PORT = os.getenv("SMTP_PORT")
+SMTP_USER = os.getenv("SMTP_USER")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
+
+
+def yonetici_maillerini_getir(db):
+   
+    sonuc = db.query(Personel.email).filter(
+        Personel.rol == "yonetici",
+        Personel.email.isnot(None)
+    ).all()
+    return [r[0] for r in sonuc]
+
+
+def gunluk_rapor_maili_gonder(db, birim_adi, hedef_tarih, dosya_yollari):
+   
+    aliciler = yonetici_maillerini_getir(db)
+    if not aliciler:
+        print(f"[UYARI] {birim_adi} için mail gönderilecek yönetici bulunamadı.")
+        return False
+
+    tarih_str = hedef_tarih.strftime("%d.%m.%Y")
+
+    msg = EmailMessage()
+    msg["Subject"] = f"{birim_adi} - Günlük Personel Takip Raporu ({tarih_str})"
+    msg["From"] = SMTP_USER
+    msg["To"] = ", ".join(aliciler)
+    msg.set_content(
+        f"{birim_adi} birimine ait {tarih_str} tarihli günlük personel takip raporu ektedir."
+    )
+
+    for dosya_yolu in dosya_yollari:
+        yol = Path(dosya_yolu)
+        with open(yol, "rb") as f:
+            msg.add_attachment(
+                f.read(),
+                maintype="application",
+                subtype="vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                filename=yol.name,
+            )
+
+    try:
+        with smtplib.SMTP(SMTP_HOST, int(SMTP_PORT)) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.send_message(msg)
+        print(f"[OK] {birim_adi} raporu {len(aliciler)} yöneticiye gönderildi.")
+        return True
+    except Exception as e:
+        print(f"[HATA] {birim_adi} raporu gönderilemedi: {e}")
+        return False
+</file>
+
+<file path="backend/seed_admin.py">
+from passlib.context import CryptContext
+from database import SessionLocal
+from models import Personel
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+db = SessionLocal()
+
+ilk_yonetici = Personel(
+    sicil_no="1234/1234",
+    ad_soyad="Sıla Başkaya",
+    birim_no=1,
+    rol="yonetici",
+    sifre_hash=pwd_context.hash("Sifre1234"),  # istersen değiştir, 8-16 karakter kuralına uy
+    servis_no=None,
+)
+
+db.add(ilk_yonetici)
+db.commit()
+db.refresh(ilk_yonetici)
+
+print(f"Eklendi: {ilk_yonetici.sicil_no} - {ilk_yonetici.rol}")
+
+db.close()
+</file>
+
+<file path="backend/test_archive.py">
+from database import SessionLocal
+from archive import kayit_arsivle, ek_mesai_arsivle
+import datetime
+
+db = SessionLocal()
+
+hedef_tarih = datetime.date(2026, 7, 31)  
+
+kayit_sayisi = kayit_arsivle(db, hedef_tarih)
+ek_mesai_sayisi = ek_mesai_arsivle(db, hedef_tarih)
+
+print(f"Arşivlenen Kayit sayısı: {kayit_sayisi}")
+print(f"Arşivlenen Ek_Mesai sayısı: {ek_mesai_sayisi}")
+
+db.close()
+</file>
+
+<file path="backend/test_mail.py">
+from database import SessionLocal
+from mail import gunluk_rapor_maili_gonder
+import datetime
+
+db = SessionLocal()
+
+hedef_tarih = datetime.date(2026, 7, 31)   
+birim_adi = "Tv"                       
+
+
+dosya_yollari = [
+    "31.07.2026 TV_ekMesai.xlsx",
+    "31.07.2026 TV.xlsx",
+]
+
+basarili = gunluk_rapor_maili_gonder(db, birim_adi, hedef_tarih, dosya_yollari)
+print("Sonuç:", basarili)
+
+db.close()
+</file>
+
+<file path="backend/test_rapor.py">
+from datetime import date
+from database import SessionLocal
+from report import excel_dosyalari_olustur, excel_bicimlendir
+
+db = SessionLocal()
+
+hedef_birim = 2
+birim_adi = "TV"
+hedef_tarih = date(2026, 7, 31)
+
+kayit_dosya, ek_mesai_dosya = excel_dosyalari_olustur(db, hedef_birim, birim_adi, hedef_tarih)
+
+excel_bicimlendir(kayit_dosya)
+excel_bicimlendir(ek_mesai_dosya)
+
+print("Oluşturuldu:", kayit_dosya)
+print("Oluşturuldu:", ek_mesai_dosya)
+
+db.close()
+</file>
+
+<file path="backend/test_reset.py">
+from database import SessionLocal
+from archive import kayit_arsivle, ek_mesai_arsivle, kayit_sifirla, ek_mesai_sifirla
+import datetime
+
+db = SessionLocal()
+
+hedef_tarih = datetime.date(2026, 7, 31)  
+
+kayit_sayisi = kayit_sifirla(db, hedef_tarih)
+ek_mesai_sayisi = ek_mesai_sifirla(db, hedef_tarih)
+
+print(f"Silinen Kayit sayısı: {kayit_sayisi}")
+print(f"Silinen Ek_Mesai sayısı: {ek_mesai_sayisi}")
+
+db.close()
+</file>
+
+<file path=".gitignore">
+# Python
+venv/
+__pycache__/
+*.pyc
+.env
+
+# macOS
+.DS_Store
+</file>
+
+<file path="backend/auth.py">
+import os
+from datetime import datetime, timedelta
+from jose import jwt
+from dotenv import load_dotenv
+from pathlib import Path
+from fastapi import Depends, HTTPException
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from jose import JWTError
+
+oauth2_scheme = HTTPBearer()
+
+
+
+
+load_dotenv(dotenv_path=Path(__file__).parent / ".env")
+
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = "HS256"
+TOKEN_SURESI_DAKIKA = 12 * 60  # 12 saat
+
+
+def get_current_user(kimlik: HTTPAuthorizationCredentials = Depends(oauth2_scheme)):
+    token = kimlik.credentials
+    try:
+        veri = token_dogrula(token)
+        return veri
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Token geçersiz veya süresi dolmuş")
+
+def token_olustur(veri: dict):
+    veri_kopya = veri.copy()
+    son_kullanma = datetime.now() + timedelta(minutes=TOKEN_SURESI_DAKIKA)
+    veri_kopya.update({"exp": son_kullanma})
+    return jwt.encode(veri_kopya, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def token_dogrula(token: str):
+    return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+
+
+def rol_filtreleme(izinli_roller: list):
+    def kontrol(kullanici: dict = Depends(get_current_user)):
+        if kullanici["rol"] not in izinli_roller:
+            raise HTTPException(403, "Yetkiniz yok")
+        return kullanici
+    return kontrol
+</file>
+
+<file path="backend/database.py">
+import os
+from dotenv import load_dotenv
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, declarative_base
+from pathlib import Path
+
+
+load_dotenv(dotenv_path=Path(__file__).parent / ".env")
+
+host= os.getenv("DB_HOST")
+port = os.getenv("DB_PORT")
+db_name = os.getenv("DB_NAME")
+db_user = os.getenv("DB_USER")
+db_password = os.getenv("DB_PASSWORD")
+
+DATABASE_URL = f"postgresql://{db_user}:{db_password}@{host}:{port}/{db_name}"
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base() #Base class üretir.Bu python sınıfı bir veritabanı tablosunu temsil eder.
+</file>
+
+<file path="backend/report.py">
+from schemas import (
+    BirimCreate, BirimOut ,
+    BantCreate , BantOut,
+    PersonelCreate, PersonelOut,
+    KayitCreate, KayitOut,
+    EkMesaiCreate, EkMesaiOut,
+    PersonelSicilNo,
+    LoginRequest
+    )
+from sqlalchemy import func
+from models import Birim , Bant , Personel , Kayit ,Ek_Mesai
+import pandas as pd
+
+
+from openpyxl import load_workbook
+from openpyxl.styles import PatternFill
+
+
+def kayit_verisi_getir(db, hedef_birim, hedef_tarih):
+    sonuc = db.query(
+        Kayit.sicil_no,
+        Personel.ad_soyad,
+        Bant.bant_adi,
+        Kayit.giris_saati,
+        Kayit.cikis_saati
+    ).join(Personel, Kayit.sicil_no == Personel.sicil_no) \
+    .join(Bant, Kayit.bant_no == Bant.bant_no) \
+    .join(Birim, Bant.birim_no == Birim.birim_no
+    ).filter(func.date(Kayit.giris_saati)== hedef_tarih,Birim.birim_no==hedef_birim
+    ).all()
+    return sonuc
+
+def ek_mesai_verisi_getir(db, hedef_birim, hedef_tarih):
+    sonuc = db.query(
+        Ek_Mesai.sicil_no,
+        Personel.ad_soyad,
+        Ek_Mesai.baslangic_saati,
+        Ek_Mesai.bitis_saati
+    ).join(Personel, Ek_Mesai.sicil_no == Personel.sicil_no
+    ).filter(
+        func.date(Ek_Mesai.baslangic_saati) == hedef_tarih,
+        Ek_Mesai.birim_no == hedef_birim
+    ).all()
+    return sonuc
+
+def kayit_raporu_olustur(db, hedef_birim, hedef_tarih):
+    veri = kayit_verisi_getir(db, hedef_birim, hedef_tarih)
+    df = pd.DataFrame(veri, columns=["sicil_no", "ad_soyad", "bant_adi", "giris_saati", "cikis_saati"])  
+    df["cikis_saati"] = df["cikis_saati"].fillna("Aktif")
+    return df
+
+def ek_mesai_raporu_olustur(db, hedef_birim, hedef_tarih):
+    veri = ek_mesai_verisi_getir(db, hedef_birim, hedef_tarih)
+    df = pd.DataFrame(veri, columns=["sicil_no", "ad_soyad", "baslangic_saati", "bitis_saati"])  
+    df["bitis_saati"] = df["bitis_saati"].fillna("Aktif")
+    return df
+
+def excel_dosyalari_olustur(db, hedef_birim, birim_adi, hedef_tarih):
+    kayit_df = kayit_raporu_olustur(db, hedef_birim, hedef_tarih)
+    ek_mesai_df = ek_mesai_raporu_olustur(db, hedef_birim, hedef_tarih)
+
+    tarih_str = hedef_tarih.strftime("%d.%m.%Y")
+
+    kayit_dosya_adi = f"{tarih_str} {birim_adi}.xlsx"
+    ek_mesai_dosya_adi = f"{tarih_str} {birim_adi}_ekMesai.xlsx"
+
+    kayit_df.to_excel(kayit_dosya_adi, index=False)
+    ek_mesai_df.to_excel(ek_mesai_dosya_adi, index=False)
+
+    excel_bicimlendir(kayit_dosya_adi)
+    excel_bicimlendir(ek_mesai_dosya_adi)
+    return kayit_dosya_adi, ek_mesai_dosya_adi
+
+def excel_bicimlendir(dosya_adi):
+    wb = load_workbook(dosya_adi)
+    ws = wb.active
+
+    sari_dolgu = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+
+    # Başlık satırını sarı yap
+    for hucre in ws[1]:
+        hucre.fill = sari_dolgu
+    # Her sütunu içeriğine göre otomatik genişlet
+    for sutun in ws.columns:
+        max_uzunluk = max(len(str(hucre.value)) for hucre in sutun if hucre.value is not None)
+        sutun_harfi = sutun[0].column_letter
+        ws.column_dimensions[sutun_harfi].width = max_uzunluk + 2
+
+    wb.save(dosya_adi)
+</file>
+
+<file path="backend/onvo_schema.sql">
+CREATE SCHEMA public;
+CREATE TYPE rol_turu AS ENUM ('calisan', 'bant_sefi', 'yonetici');
+ALTER TABLE Personel ADD COLUMN email VARCHAR(255);
+
+
+CREATE TABLE Birim (
+    birim_no SERIAL PRIMARY KEY,
+    birim_adi VARCHAR(40)
+);
+
+CREATE TABLE Bant (
+    bant_no SERIAL PRIMARY KEY,
+    birim_no INTEGER REFERENCES Birim(birim_no) ON DELETE CASCADE,
+    bant_adi VARCHAR(100),
+    UNIQUE (birim_no, bant_adi)
+);
+
+CREATE TABLE Personel (
+
+    sicil_no VARCHAR(30) PRIMARY KEY,
+    ad_soyad VARCHAR(60) NOT NULL,
+    birim_no INTEGER REFERENCES Birim(birim_no) ON DELETE RESTRICT,
+    rol rol_turu NOT NULL,
+    sifre_hash VARCHAR(60) NOT NULL,
+    servis_no VARCHAR(60),
+    aktif BOOLEAN NOT NULL DEFAULT TRUE,
+    CHECK (rol = 'calisan' OR birim_no IS NOT NULL)
+);
+
+CREATE TABLE Kayit (
+    kayit_id SERIAL PRIMARY KEY,
+    sicil_no VARCHAR(30) NOT NULL REFERENCES Personel(sicil_no) ON DELETE RESTRICT,
+    bant_no INTEGER NOT NULL REFERENCES Bant(bant_no) ON DELETE RESTRICT,
+    giris_saati TIMESTAMP NOT NULL,
+    cikis_saati TIMESTAMP
+);
+
+CREATE TABLE Ek_Mesai (
+    ek_mesai_id SERIAL PRIMARY KEY,
+    sicil_no VARCHAR(30) NOT NULL REFERENCES Personel(sicil_no) ON DELETE RESTRICT,
+    baslangic_saati TIMESTAMP NOT NULL,
+    bitis_saati TIMESTAMP,
+    birim_no INTEGER NOT null REFERENCES Birim(birim_no) ON DELETE RESTRICT
+);
+
+CREATE TABLE Gunluk_Arsiv (
+    arsiv_id SERIAL PRIMARY KEY,
+    sicil_no VARCHAR(30) NOT NULL REFERENCES Personel(sicil_no) ON DELETE RESTRICT,
+    bant_no INTEGER NOT NULL REFERENCES Bant(bant_no) ON DELETE RESTRICT,
+    tarih DATE,
+    giris_saati TIMESTAMP,
+    cikis_saati TIMESTAMP
+);
+CREATE TABLE Ek_Mesai_Arsiv (
+    ek_mesai_arsiv_id SERIAL PRIMARY KEY,
+    sicil_no VARCHAR(20) NOT NULL REFERENCES Personel(sicil_no),
+    birim_no INTEGER NOT NULL REFERENCES Birim(birim_no) ON DELETE RESTRICT,
+    tarih DATE NOT NULL,
+    baslangic_saati TIMESTAMP NOT NULL,
+    bitis_saati TIMESTAMP
+);
+</file>
+
+<file path="backend/models.py">
+from database import Base
+from sqlalchemy import Column, Integer, String , Boolean
+from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy import Enum
+from sqlalchemy import Column, Integer, String, ForeignKey, Enum, DateTime, Date
+
+class Birim(Base):
+    __tablename__ = "birim"
+
+    birim_no = Column(Integer,primary_key =True)
+    birim_adi =Column(String(40))
+
+
+class Bant(Base):
+    __tablename__ = "bant"
+
+    bant_no = Column(Integer,primary_key = True)
+    birim_no = Column(Integer,ForeignKey("birim.birim_no",ondelete="CASCADE"))
+    bant_adi= Column(String(100))
+
+class Personel(Base):
+    __tablename__ = "personel"
+
+    sicil_no = Column(String(30),primary_key = True)
+    ad_soyad = Column(String(60),nullable=False)
+    birim_no = Column(Integer, ForeignKey("birim.birim_no",ondelete="RESTRICT"))
+    rol = Column(Enum("calisan","bant_sefi","yonetici",name="rol_turu"),nullable=False)
+    sifre_hash = Column(String(60),nullable=False)
+    servis_no= Column(String(60))
+    aktif = Column(Boolean, nullable=False, default=True)
+    email = Column(String(255), nullable=True)
+
+
+class Kayit(Base):
+    __tablename__ = "kayit"
+
+    kayit_id = Column(Integer, primary_key=True)
+    sicil_no = Column(String(30), ForeignKey("personel.sicil_no",ondelete="RESTRICT"), nullable=False)
+    bant_no = Column(Integer, ForeignKey("bant.bant_no",ondelete="RESTRICT"), nullable=False)
+    giris_saati = Column(DateTime, nullable=False)
+    cikis_saati = Column(DateTime)
+
+
+class Ek_Mesai(Base):
+    __tablename__ = "ek_mesai"
+
+    ek_mesai_id = Column(Integer, primary_key=True)
+    sicil_no = Column(String(30), ForeignKey("personel.sicil_no",ondelete="RESTRICT"), nullable=False)
+    baslangic_saati = Column(DateTime, nullable=False)
+    bitis_saati = Column(DateTime)
+    birim_no = Column(Integer,ForeignKey("birim.birim_no",ondelete="RESTRICT"),nullable=False)
+
+
+class Gunluk_Arsiv(Base):
+    __tablename__ = "gunluk_arsiv"
+
+    arsiv_id = Column(Integer, primary_key=True)
+    sicil_no = Column(String(30), ForeignKey("personel.sicil_no",ondelete="RESTRICT"), nullable=False)
+    bant_no = Column(Integer, ForeignKey("bant.bant_no",ondelete="RESTRICT"), nullable=False)
+    tarih = Column(Date)
+    giris_saati = Column(DateTime)
+    cikis_saati = Column(DateTime)
+
+
+class Ek_Mesai_Arsiv(Base):
+    __tablename__ = "ek_mesai_arsiv"
+
+    ek_mesai_arsiv_id = Column(Integer, primary_key=True, index=True)
+    sicil_no = Column(String, ForeignKey("personel.sicil_no"), nullable=False)
+    birim_no = Column(Integer, ForeignKey("birim.birim_no"), nullable=False)
+    tarih = Column(Date, nullable=False)
+    baslangic_saati = Column(DateTime, nullable=False)
+    bitis_saati = Column(DateTime, nullable=True)
+</file>
+
+<file path="backend/schemas.py">
+from pydantic import BaseModel
+from typing import Optional
+from datetime import datetime
+from pydantic import BaseModel, Field
+
+class LoginRequest(BaseModel):
+    sicil_no: str
+    sifre: str
+ 
+
+    
+class PersonelSicilNo(BaseModel):
+    sicil_no: str
+
+class BirimCreate(BaseModel):
+    birim_adi: str
+
+class BantCreate(BaseModel):
+    bant_no: int
+    birim_no: int
+    bant_adi : str
+
+class PersonelCreate(BaseModel):
+    sicil_no: str
+    ad_soyad: str
+    birim_no: Optional[int] = None
+    rol: str
+    sifre: str = Field(min_length=8, max_length=16)
+    servis_no: Optional[str] = None
+
+class KayitCreate(BaseModel):
+    sicil_no: str
+    bant_no: int
+
+class EkMesaiCreate(BaseModel):
+    sicil_no: str
+
+
+
+class BirimOut(BaseModel):
+    birim_no:int
+    birim_adi:str
+
+    class Config:
+        from_attributes = True
+
+
+class BantOut(BaseModel):
+    bant_no: int
+    birim_no: int
+    bant_adi : str
+
+    class Config:
+        from_attributes = True
+    
+class PersonelOut(BaseModel):
+    sicil_no: str
+    ad_soyad: str
+    birim_no: Optional[int] = None
+    rol: str
+    servis_no: Optional[str] = None
+    aktif: bool
+
+    class Config:
+        from_attributes = True
+
+class KayitOut(BaseModel):
+    kayit_id: int
+    sicil_no: str
+    bant_no: int
+    giris_saati: datetime
+    cikis_saati: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True 
+
+class EkMesaiOut(BaseModel):
+    ek_mesai_id: int
+    sicil_no: str
+    baslangic_saati: datetime
+    bitis_saati: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+</file>
+
+<file path="backend/main.py">
+from fastapi import FastAPI , Depends
+from auth import token_olustur, get_current_user, rol_filtreleme
+from sqlalchemy.orm import Session
+from database import SessionLocal
+from fastapi import HTTPException
+from passlib.context import CryptContext
+from datetime import datetime, timedelta
+from apscheduler.schedulers.background import BackgroundScheduler
+from models import Birim , Bant , Personel , Kayit ,Ek_Mesai
+from schemas import (
+    BirimCreate, BirimOut ,
+    BantCreate , BantOut,
+    PersonelCreate, PersonelOut,
+    KayitCreate, KayitOut,
+    EkMesaiCreate, EkMesaiOut,
+    PersonelSicilNo,
+    LoginRequest
+    )
+
+app = FastAPI()
+
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# Her bir sessionu açıp kapatmak için
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db #normal return'den farkı: fonksiyon yield satırında duraklar, değeri dışarı verir, çağıran taraf işini bitirince fonksiyona geri döner ve kalan kodu çalıştırır.
+    finally:
+        db.close()
+
+def gun_sonu_kapat():
+    db = SessionLocal()
+    try:
+        aktif_kayitlar = db.query(Kayit).filter(Kayit.cikis_saati == None).all()
+
+        for kayit in aktif_kayitlar:
+            kayit.cikis_saati = datetime.now().replace(hour=17, minute=0, second=0, microsecond=0)
+
+        db.commit()
+    finally:
+        db.close()
+
+scheduler = BackgroundScheduler()
+scheduler.add_job(gun_sonu_kapat, "cron", hour=17, minute=00)
+scheduler.start()
+
+
+
+@app.post("/birim", response_model=BirimOut)
+def birim_ekle(birim: BirimCreate, db: Session = Depends(get_db),kullanici: dict = Depends(rol_filtreleme(["yonetici"]))):
+    yeni_birim = Birim(birim_adi=birim.birim_adi)
+    db.add(yeni_birim)
+    db.commit()
+    db.refresh(yeni_birim)
+    return yeni_birim
+
+@app.post("/bant", response_model=BantOut)
+def bant_ekle(bant: BantCreate, db: Session = Depends(get_db),kullanici: dict = Depends(rol_filtreleme(["yonetici"]))):
+    yeni_bant = Bant(birim_no=bant.birim_no,bant_adi=bant.bant_adi)
+    db.add(yeni_bant)
+    db.commit()
+    db.refresh(yeni_bant)
+    return yeni_bant
+
+@app.post("/personel", response_model=PersonelOut)
+def personel_ekle(personel: PersonelCreate, db: Session = Depends(get_db),kullanici: dict = Depends(rol_filtreleme(["yonetici"]))):
+    if personel.rol != "calisan" and personel.birim_no is None:
+        raise HTTPException(
+            status_code=400,
+            detail="bant_sefi ve yonetici rolündeki personelin bir birime atanmış olması gerekir."
+        )
+
+    yeni_personel = Personel(
+        sicil_no=personel.sicil_no,
+        ad_soyad=personel.ad_soyad,
+        birim_no=personel.birim_no,
+        rol=personel.rol,
+        sifre_hash=pwd_context.hash(personel.sifre),
+        servis_no=personel.servis_no,
+    )
+    db.add(yeni_personel)
+    db.commit()
+    db.refresh(yeni_personel)
+    return yeni_personel
+
+@app.post("/kayit", response_model=KayitOut)
+def kayit_ekle(kayit: KayitCreate, db: Session = Depends(get_db),kullanici: dict = Depends(rol_filtreleme(["yonetici","bant_sefi"]))):
+
+    aktif_kayit = db.query(Kayit).filter(
+        Kayit.sicil_no == kayit.sicil_no,
+        Kayit.cikis_saati == None
+    ).first()
+
+    if aktif_kayit is not None and aktif_kayit.bant_no == kayit.bant_no:
+        gecen_sure = datetime.now() - aktif_kayit.giris_saati
+
+        if gecen_sure < timedelta(minutes=5):
+            raise HTTPException(
+                status_code=400,
+                detail="Bu personel bantta kısa süre önce okutuldu,yanlış okutma."
+            )
+        else:
+            aktif_kayit.cikis_saati = datetime.now()
+            db.commit()
+            db.refresh(aktif_kayit)
+            return aktif_kayit
+
+    elif aktif_kayit is not None and aktif_kayit.bant_no != kayit.bant_no:
+        aktif_kayit.cikis_saati = datetime.now()
+        yeni_kayit = Kayit(
+            sicil_no=kayit.sicil_no,
+            bant_no=kayit.bant_no,
+            giris_saati=datetime.now(),
+        )
+        db.add(yeni_kayit)
+        db.commit()
+        db.refresh(yeni_kayit)
+        return yeni_kayit
+
+    else:
+        yeni_kayit = Kayit(
+            sicil_no=kayit.sicil_no,
+            bant_no=kayit.bant_no,
+            giris_saati=datetime.now(),
+        )
+        db.add(yeni_kayit)
+        db.commit()
+        db.refresh(yeni_kayit)
+        return yeni_kayit
+
+
+@app.post("/ek-mesai", response_model=EkMesaiOut)
+def ek_mesai_ekle(ek_mesai: EkMesaiCreate, db: Session = Depends(get_db),kullanici: dict = Depends(rol_filtreleme(["yonetici","bant_sefi"]))):
+    aktif_mesai = db.query(Ek_Mesai).filter(
+        Ek_Mesai.sicil_no == ek_mesai.sicil_no,
+        Ek_Mesai.bitis_saati == None
+    ).first()
+
+    if aktif_mesai is not None:
+        gecen_sure = datetime.now() - aktif_mesai.baslangic_saati   
+        if gecen_sure < timedelta(minutes=5):
+            raise HTTPException(
+                status_code=400,
+                detail="Bu personel kısa süre önce mesaiye başladı, yanlış okutma."
+            )
+        else:
+            aktif_mesai.bitis_saati = datetime.now()
+            db.commit()
+            db.refresh(aktif_mesai)
+            return aktif_mesai
+    else:
+        yeni_mesai = Ek_Mesai(
+            sicil_no=ek_mesai.sicil_no,
+            baslangic_saati=datetime.now(),
+        )
+        db.add(yeni_mesai)
+        db.commit()
+        db.refresh(yeni_mesai)
+        return yeni_mesai
+
+@app.post("/login")
+def login(veri: LoginRequest, db: Session = Depends(get_db)):
+    personel = db.query(Personel).filter(Personel.sicil_no == veri.sicil_no).first()
+
+    if personel is None:
+        raise HTTPException(status_code=401, detail="Sicil no veya şifre hatalı")
+
+    if pwd_context.verify(veri.sifre,personel.sifre_hash) == False:
+        raise HTTPException(status_code=401, detail= "Şifre Hatalı")
+    elif personel.aktif==False:
+        raise HTTPException(status_code=403, detail= "Sicil no hatalı")
+    else:
+        token = token_olustur({"sicil_no": personel.sicil_no, "rol": personel.rol , "birim_no":personel.birim_no})
+        return {"access_token": token, "token_type": "bearer"}
+
+   
+@app.patch("/personel/aktif", response_model=PersonelOut)
+def personel_aktif_degistir(veri: PersonelSicilNo, db: Session = Depends(get_db),kullanici: dict = Depends(get_current_user)):
+    personel = db.query(Personel).filter(Personel.sicil_no == veri.sicil_no).first()
+
+    if personel is None:
+        raise HTTPException(status_code=404, detail="Personel bulunamadı")
+    
+    if kullanici["rol"]=="calisan":
+        raise HTTPException(status_code=403, detail="Bu işlem için yetkiniz yok")
+    else:
+        personel.aktif = not personel.aktif
+        db.commit()
+        db.refresh(personel)
+        return personel
+
+
+@app.get("/birim", response_model=list[BirimOut])
+def birim_listele(db: Session = Depends(get_db),kullanici: dict = Depends(rol_filtreleme(["bant_sefi", "yonetici"]))):
+    return db.query(Birim).all()
+
+
+
+@app.get("/bant", response_model=list[BantOut])
+def bant_listele(db: Session = Depends(get_db),kullanici: dict = Depends(rol_filtreleme(["bant_sefi", "yonetici"]))): 
+    if kullanici["rol"]=="yonetici": 
+        return db.query(Bant).all()
+    elif kullanici["rol"] == "bant_sefi":
+        return db.query(Bant).filter(Bant.birim_no == kullanici["birim_no"]).all()
+
+
+@app.get("/personel", response_model=list[PersonelOut])
+def personel_listele(db: Session = Depends(get_db) ,kullanici: dict = Depends(rol_filtreleme(["bant_sefi", "yonetici"]))):
+    if kullanici["rol"]=="yonetici": 
+        return db.query(Personel).all()
+    elif kullanici["rol"] == "bant_sefi":
+        return db.query(Personel).filter(Personel.birim_no == kullanici["birim_no"]).all()
+
+@app.get("/kayit", response_model=list[KayitOut])
+def kayit_listele(db: Session = Depends(get_db),kullanici: dict = Depends(rol_filtreleme(["yonetici"]))):
+    return db.query(Kayit).all()
+
+
+@app.get("/ek-mesai", response_model=list[EkMesaiOut])
+def ek_mesai_listele(db: Session = Depends(get_db),kullanici: dict = Depends(rol_filtreleme(["yonetici"]))):
+    return db.query(Ek_Mesai).all()
+</file>
+
+</files>
