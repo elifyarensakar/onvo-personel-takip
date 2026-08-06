@@ -50,15 +50,66 @@ class _StatsAttendanceScreenState extends State<StatsAttendanceScreen> {
   }
 
   Future<void> _handleSendReport() async {
+    final appData = context.read<AppData>();
+    final birim = appData.currentBirim.name;
+
+    final zatenGonderildi = await appData.raporBugunGonderildiMi(birim);
+
+    String? notMetni;
+    if (zatenGonderildi) {
+      final controller = TextEditingController();
+      final devamEt = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Rapor bugün zaten gönderildi'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Yine de tekrar göndermek istiyor musunuz?'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                decoration: const InputDecoration(
+                  labelText: 'Not (opsiyonel)',
+                  hintText: 'Örn. Geç çıkış oldu, düzeltme',
+                ),
+                maxLines: 2,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Vazgeç'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Yine de Gönder'),
+            ),
+          ],
+        ),
+      );
+      if (devamEt != true) return;
+      notMetni = controller.text.trim().isEmpty ? null : controller.text.trim();
+    }
+
     setState(() => _isSendingReport = true);
 
-    final appData = context.read<AppData>();
-    // TODO: alıcı listesi backend'den (birim yöneticisi / İK tanımlı
-    // e-postalar) gelecek.
-    await appData.sendReport(
-      birim: appData.currentBirim.name,
-      recipients: const ['[email protected]', '[email protected]'],
-    );
+    try {
+      await appData.sendReport(
+        birim: birim,
+        recipients: const [],
+        notMetni: notMetni,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(e.toString().replaceFirst('ScanException: ', ''))),
+        );
+      }
+    }
 
     if (!mounted) return;
     setState(() => _isSendingReport = false);

@@ -5,6 +5,9 @@ import '../widgets/onvo_text_field.dart';
 import 'admin_panel_screen.dart';
 import 'forgot_password_screen.dart';
 import 'home_screen.dart';
+import 'package:provider/provider.dart';
+import '../services/api_service.dart';
+import '../state/app_data.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -42,28 +45,40 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoading = true);
 
-    // TODO: gerçek kimlik doğrulama servisine bağlanınca burası
-    // sicil no + şifreyi backend'e gönderip JWT alacak şekilde
-    // değiştirilecek. Birim bilgisi backend tarafında sicil no'dan
-    // çözülüyor, bu yüzden burada ayrı bir birim seçimi yok. JWT/login
-    // cevabı ayrıca kullanıcının `rol` bilgisini de dönecek — yönetici
-    // ise admin paneline, değilse (bant şefi) QR/istatistik ana sayfasına
-    // yönlendirilecek.
-    await Future.delayed(const Duration(milliseconds: 1400));
+    try {
+      final result = await ApiService().login(
+        _sicilController.text.trim(),
+        _passwordController.text.trim(),
+      );
 
-    if (!mounted) return;
-    setState(() => _isLoading = false);
+      if (!mounted) return;
 
-    // Demo amaçlı rol tespiti — backend bağlanınca kaldırılacak. Test
-    // etmek için sicil no alanına "9999" ile başlayan bir değer girin.
-    final isYonetici = _sicilController.text.trim().startsWith('9999');
+      context.read<AppData>().setSession(
+            token: result.token,
+            rol: result.rol,
+            birimNo: result.birimNo,
+            sicilNo: result.sicilNo,
+          );
 
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) =>
-            isYonetici ? const AdminPanelScreen() : const HomeScreen(),
-      ),
-    );
+      await context.read<AppData>().loadInitialData();
+
+      setState(() => _isLoading = false);
+
+      final isYonetici = result.rol == 'yonetici';
+
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) =>
+              isYonetici ? const AdminPanelScreen() : const HomeScreen(),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _passwordError = e.toString().replaceFirst('Exception: ', '');
+      });
+    }
   }
 
   @override

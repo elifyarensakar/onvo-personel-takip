@@ -4,6 +4,7 @@ from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy import Enum
 from sqlalchemy import Column, Integer, String, ForeignKey, Enum, DateTime, Date
 
+
 class Birim(Base):
     __tablename__ = "birim"
 
@@ -71,3 +72,12 @@ class Ek_Mesai_Arsiv(Base):
     tarih = Column(Date, nullable=False)
     baslangic_saati = Column(DateTime, nullable=False)
     bitis_saati = Column(DateTime, nullable=True)
+
+class Rapor_Gonderim_Log(Base):
+    __tablename__ = "rapor_gonderim_log"
+
+    id = Column(Integer, primary_key=True, index=True)
+    birim_no = Column(Integer, ForeignKey("birim.birim_no"), nullable=False)
+    tarih = Column(Date, nullable=False)
+    saat = Column(DateTime, nullable=False)
+    not_metni = Column(String(500), nullable=True)

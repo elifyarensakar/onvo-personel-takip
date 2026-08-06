@@ -59,3 +59,11 @@ CREATE TABLE Ek_Mesai_Arsiv (
     baslangic_saati TIMESTAMP NOT NULL,
     bitis_saati TIMESTAMP
 );
+
+CREATE TABLE Rapor_Gonderim_Log (
+    id SERIAL PRIMARY KEY,
+    birim_no INTEGER NOT NULL REFERENCES Birim(birim_no),
+    tarih DATE NOT NULL,
+    saat TIMESTAMP NOT NULL,
+    not_metni VARCHAR(500)
+);

@@ -25,6 +25,33 @@ class _PersonelEditResult {
   final String rol;
 }
 
+const Map<String, String> _rolLabels = {
+  'calisan': 'Çalışan',
+  'bant_sefi': 'Bant Şefi',
+  'yonetici': 'Yönetici',
+};
+String _rolLabel(String rol) => _rolLabels[rol] ?? rol;
+
+class _PersonelAddResult {
+  const _PersonelAddResult({
+    required this.sicilNo,
+    required this.adSoyad,
+    required this.birim,
+    required this.rol,
+    required this.sifre,
+    this.email,
+    this.servisNo,
+  });
+
+  final String sicilNo;
+  final String adSoyad;
+  final String birim;
+  final String rol;
+  final String sifre;
+  final String? email;
+  final String? servisNo;
+}
+
 enum _AdminTab { overview, units, personnel }
 
 // ---------------------------------------------------------------------------
@@ -158,6 +185,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   _AdminTab _selectedTab = _AdminTab.overview;
   String _selectedBirimFilter = 'Tüm Birimler';
   bool _isRefreshing = false;
+  bool _isAddingPersonel = false;
 
   String _formatToday() {
     final now = DateTime.now();
@@ -231,7 +259,17 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     );
 
     if (name != null && name.isNotEmpty && mounted) {
-      context.read<AppData>().addBirim(name);
+      try {
+        await context.read<AppData>().addBirim(name);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(e.toString().replaceFirst('ScanException: ', '')),
+            ),
+          );
+        }
+      }
     }
   }
 
@@ -263,7 +301,17 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     );
 
     if (name != null && name.isNotEmpty && mounted) {
-      context.read<AppData>().addBant(birim, name);
+      try {
+        await context.read<AppData>().addBant(birim, name);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(e.toString().replaceFirst('ScanException: ', '')),
+            ),
+          );
+        }
+      }
     }
   }
 
@@ -286,6 +334,39 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             rol: result.rol,
           );
     }
+  }
+
+  Future<void> _showAddPersonelSheet(List<BirimData> birimler) async {
+    final result = await showModalBottomSheet<_PersonelAddResult>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _AddPersonelSheet(birimler: birimler),
+    );
+
+    if (result == null || !mounted) return;
+
+    setState(() => _isAddingPersonel = true);
+    try {
+      await context.read<AppData>().addPersonelBackend(
+            sicilNo: result.sicilNo,
+            adSoyad: result.adSoyad,
+            birim: result.birim,
+            rol: result.rol,
+            sifre: result.sifre,
+            email: result.email,
+            servisNo: result.servisNo,
+          );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceFirst('ScanException: ', '')),
+          ),
+        );
+      }
+    }
+    if (mounted) setState(() => _isAddingPersonel = false);
   }
 
   @override
@@ -625,6 +706,23 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
           ),
           const SizedBox(height: 10),
         ],
+        const SizedBox(height: 4),
+        OutlinedButton.icon(
+          onPressed: _isAddingPersonel
+              ? null
+              : () => _showAddPersonelSheet(appData.birimler),
+          icon: const Icon(Icons.person_add_alt_rounded,
+              color: AppColors.onvoBlue),
+          label:
+              Text(_isAddingPersonel ? 'Ekleniyor...' : 'Yeni Personel Ekle'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.onvoBlue,
+            side: const BorderSide(color: AppColors.onvoBlue),
+            minimumSize: const Size.fromHeight(50),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          ),
+        ),
       ],
     );
   }
@@ -811,7 +909,7 @@ class _PersonelRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isYonetici = personel.rol == 'Yönetici';
+    final isYonetici = personel.rol == 'yonetici';
     return Material(
       color: AppColors.surfaceTint,
       borderRadius: BorderRadius.circular(14),
@@ -860,7 +958,7 @@ class _PersonelRow extends StatelessWidget {
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
-                  personel.rol,
+                  _rolLabel(personel.rol),
                   style: AppText.footer.copyWith(
                     color:
                         isYonetici ? AppColors.amberDark : AppColors.onvoBlue,
@@ -881,6 +979,11 @@ class _PersonelRow extends StatelessWidget {
 
 /// Personel düzenleme alt sayfası — ad soyad, birim, bant ve yetki (rol)
 /// güncellenebiliyor. Kaydet'e basınca sonucu üst ekrana döndürür.
+///
+/// NOT: Bu akış henüz backend'e bağlanmadı (AppData.updatePersonel hâlâ
+/// yerel/mock günceller). _roller listesi, backend'in gerçek rol
+/// değerleriyle (calisan/bant_sefi/yonetici) uyumlu tutuluyor ki
+/// dropdown, gerçek personel verisiyle açıldığında çökmesin.
 class _EditPersonelSheet extends StatefulWidget {
   const _EditPersonelSheet({required this.personel, required this.birimler});
 
@@ -892,7 +995,7 @@ class _EditPersonelSheet extends StatefulWidget {
 }
 
 class _EditPersonelSheetState extends State<_EditPersonelSheet> {
-  static const _roller = ['Bant Şefi', 'Yönetici'];
+  static const _roller = ['calisan', 'bant_sefi', 'yonetici'];
 
   late final TextEditingController _nameController;
   late String _selectedBirim;
@@ -991,12 +1094,29 @@ class _EditPersonelSheetState extends State<_EditPersonelSheet> {
             const SizedBox(height: 14),
             Text('Yetki', style: AppText.label),
             const SizedBox(height: 6),
-            _dropdownField(
-              value: _selectedRol,
-              items: _roller,
-              onChanged: (value) {
-                if (value != null) setState(() => _selectedRol = value);
-              },
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceTint,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.line),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _selectedRol,
+                  isExpanded: true,
+                  icon: const Icon(Icons.keyboard_arrow_down_rounded,
+                      color: AppColors.muted),
+                  style: AppText.label,
+                  items: _roller
+                      .map((r) =>
+                          DropdownMenuItem(value: r, child: Text(_rolLabel(r))))
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) setState(() => _selectedRol = value);
+                  },
+                ),
+              ),
             ),
             const SizedBox(height: 22),
             OnvoPrimaryButton(
@@ -1013,6 +1133,188 @@ class _EditPersonelSheetState extends State<_EditPersonelSheet> {
                 );
               },
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Yeni personel ekleme alt sayfası — sicil no, ad soyad, birim, rol ve
+/// geçici şifre alınıp backend'e (POST /personel) gönderilir. Bant
+/// seçimi yok: proje kararınca personelin sabit bir bandı olmuyor,
+/// sadece sabit bir birimi var (bant bilgisi her girişte Kayit'ta tutulur).
+class _AddPersonelSheet extends StatefulWidget {
+  const _AddPersonelSheet({required this.birimler});
+  final List<BirimData> birimler;
+
+  @override
+  State<_AddPersonelSheet> createState() => _AddPersonelSheetState();
+}
+
+class _AddPersonelSheetState extends State<_AddPersonelSheet> {
+  static const _rolOptions = ['calisan', 'bant_sefi', 'yonetici'];
+
+  final _sicilController = TextEditingController();
+  final _adController = TextEditingController();
+  final _sifreController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _servisController = TextEditingController();
+
+  late String _selectedBirim;
+  String _selectedRol = 'calisan';
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedBirim =
+        widget.birimler.isNotEmpty ? widget.birimler.first.name : '';
+  }
+
+  @override
+  void dispose() {
+    _sicilController.dispose();
+    _adController.dispose();
+    _sifreController.dispose();
+    _emailController.dispose();
+    _servisController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final sicil = _sicilController.text.trim();
+    final ad = _adController.text.trim();
+    final sifre = _sifreController.text.trim();
+    final email = _emailController.text.trim();
+    final servis = _servisController.text.trim();
+
+    if (sicil.isEmpty || ad.isEmpty) {
+      setState(() => _error = 'Sicil no ve ad soyad zorunlu.');
+      return;
+    }
+    if (sifre.length < 8 || sifre.length > 16) {
+      setState(() => _error = 'Şifre 8-16 karakter olmalı.');
+      return;
+    }
+
+    Navigator.of(context).pop(
+      _PersonelAddResult(
+        sicilNo: sicil,
+        adSoyad: ad,
+        birim: _selectedBirim,
+        rol: _selectedRol,
+        sifre: sifre,
+        email: email.isEmpty ? null : email,
+        servisNo: servis.isEmpty ? null : servis,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding:
+          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(22, 20, 22, 24),
+        decoration: const BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: AppColors.line,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+            ),
+            Text('Yeni Personel Ekle',
+                style: AppText.h1.copyWith(fontSize: 19)),
+            const SizedBox(height: 18),
+            Text('Sicil No', style: AppText.label),
+            const SizedBox(height: 6),
+            TextField(
+                controller: _sicilController, decoration: _fieldDecoration()),
+            const SizedBox(height: 14),
+            Text('Ad Soyad', style: AppText.label),
+            const SizedBox(height: 6),
+            TextField(
+                controller: _adController, decoration: _fieldDecoration()),
+            const SizedBox(height: 14),
+            Text('Birim', style: AppText.label),
+            const SizedBox(height: 6),
+            widget.birimler.isEmpty
+                ? Text('Önce bir birim oluşturmalısınız', style: AppText.footer)
+                : _dropdownField(
+                    value: _selectedBirim,
+                    items: widget.birimler.map((b) => b.name).toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() => _selectedBirim = value);
+                      }
+                    },
+                  ),
+            const SizedBox(height: 14),
+            Text('Yetki', style: AppText.label),
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceTint,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.line),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _selectedRol,
+                  isExpanded: true,
+                  icon: const Icon(Icons.keyboard_arrow_down_rounded,
+                      color: AppColors.muted),
+                  style: AppText.label,
+                  items: _rolOptions
+                      .map((r) =>
+                          DropdownMenuItem(value: r, child: Text(_rolLabel(r))))
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) setState(() => _selectedRol = value);
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text('Geçici Şifre', style: AppText.label),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _sifreController,
+              obscureText: true,
+              decoration:
+                  _fieldDecoration().copyWith(hintText: '8-16 karakter'),
+            ),
+            const SizedBox(height: 14),
+            Text('E-posta (opsiyonel)', style: AppText.label),
+            const SizedBox(height: 6),
+            TextField(
+                controller: _emailController, decoration: _fieldDecoration()),
+            const SizedBox(height: 14),
+            Text('Servis No (opsiyonel)', style: AppText.label),
+            const SizedBox(height: 6),
+            TextField(
+                controller: _servisController, decoration: _fieldDecoration()),
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              Text(_error!, style: AppText.errorMsg),
+            ],
+            const SizedBox(height: 22),
+            OnvoPrimaryButton(label: 'Ekle', onPressed: _submit),
           ],
         ),
       ),
