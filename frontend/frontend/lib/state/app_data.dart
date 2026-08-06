@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
+import '../services/api_service.dart';
 
-/// Backend'in bir taramaya/kayda verdiği cevabın türü.
 enum ScanAction { girisYapildi, cikisYapildi }
 
 class ScanResult {
@@ -11,20 +11,17 @@ class ScanResult {
   });
   final String employeeName;
   final ScanAction action;
-
-  /// false ise bu sicil no personel listesinde kayıtlı değil — QR/manuel
-  /// girişteki bilgi doğrudan kaydedildi. Fabrikada akışı yavaşlatmamak
-  /// için bulunamayan personel reddedilmiyor, sadece bilgi amaçlı işaretleniyor.
   final bool isKnownPersonnel;
 }
 
-/// Sicil no bulunamadığında / backend'e ulaşılamadığında fırlatılır.
 class ScanException implements Exception {
   const ScanException(this.message);
   final String message;
+
+  @override
+  String toString() => message;
 }
 
-/// Birim + o birime bağlı bantlar.
 class BirimData {
   BirimData({required this.name, required List<String> bants})
       : bants = List<String>.of(bants);
@@ -40,16 +37,19 @@ class Personel {
     required this.birim,
     required this.bant,
     required this.rol,
+    this.email,
+    this.servisNo,
   });
 
   final String sicilNo;
   String adSoyad;
   String birim;
   String bant;
-  String rol; // 'Bant Şefi' | 'Yönetici'
+  String rol;
+  String? email;
+  String? servisNo;
 }
 
-/// O an bantta aktif (cikis_saati IS NULL) olan bir kayıt.
 class ActiveRecord {
   ActiveRecord({
     required this.sicilNo,
@@ -78,145 +78,170 @@ class ReportLogEntry {
   final List<String> recipients;
 }
 
-/// Uygulama genelinde paylaşılan tek durum kaynağı.
-///
-/// Login, QR ekranı, Manuel Giriş, İstatistikler ve Admin Paneli hepsi bu
-/// sınıfı okuyup üzerinde değişiklik yapıyor — bir ekrandaki değişiklik
-/// (yeni bant eklenmesi, bir taramanın sonucu, gönderilen rapor) diğer
-/// ekranlara `notifyListeners()` üzerinden otomatik yansıyor. Böylece
-/// ekranlar artık birbirinden habersiz kendi mock verisini tutmuyor.
 class AppData extends ChangeNotifier {
-  AppData() {
-    _seedMockData();
-  }
-
   final List<BirimData> birimler = [];
   final List<Personel> personelListesi = [];
   final List<ActiveRecord> aktifKayitlar = [];
   final List<ReportLogEntry> raporGecmisi = [];
 
-  void _seedMockData() {
-    // TODO: gerçek entegrasyonda bu başlangıç verisi yerine backend'den
-    // ilk yükleme (login sonrası) yapılacak.
-    birimler.addAll([
-      BirimData(name: 'A Blok', bants: ['Bant 1', 'Bant 2']),
-      BirimData(name: 'B Blok', bants: ['Bant 1', 'Bant 3']),
-      BirimData(name: 'C Blok', bants: ['Bant 1']),
-    ]);
+  // ---------------------------------------------------------------------
+  // Oturum
+  // ---------------------------------------------------------------------
 
-    personelListesi.addAll([
-      Personel(
-        sicilNo: '048213',
-        adSoyad: 'Ahmet Yılmaz',
-        birim: 'A Blok',
-        bant: 'Bant 1',
-        rol: 'Bant Şefi',
-      ),
-      Personel(
-        sicilNo: '051902',
-        adSoyad: 'Elif Demir',
-        birim: 'A Blok',
-        bant: 'Bant 2',
-        rol: 'Bant Şefi',
-      ),
-      Personel(
-        sicilNo: '039841',
-        adSoyad: 'Mehmet Kaya',
-        birim: 'B Blok',
-        bant: 'Bant 1',
-        rol: 'Bant Şefi',
-      ),
-      Personel(
-        sicilNo: '062217',
-        adSoyad: 'Zeynep Arslan',
-        birim: 'B Blok',
-        bant: 'Bant 3',
-        rol: 'Bant Şefi',
-      ),
-      Personel(
-        sicilNo: '071355',
-        adSoyad: 'Can Öztürk',
-        birim: 'C Blok',
-        bant: 'Bant 1',
-        rol: 'Bant Şefi',
-      ),
-      Personel(
-        sicilNo: '010001',
-        adSoyad: 'Selin Aydın',
-        birim: 'A Blok',
-        bant: 'Bant 1',
-        rol: 'Yönetici',
-      ),
-    ]);
+  String? authToken;
+  String? currentRol;
+  int? currentBirimNo;
+  String? currentSicilNo;
 
-    final now = DateTime.now();
-    // Demoyu baştan canlı göstermek için birkaç kişi başlangıçta "aktif"
-    // (hâlâ bantta, henüz çıkış yapmamış) olarak işaretlendi.
-    aktifKayitlar.addAll([
-      ActiveRecord(
-        sicilNo: '048213',
-        adSoyad: 'Ahmet Yılmaz',
-        birim: 'A Blok',
-        bantAdi: 'Bant 1',
-        girisSaati: now.subtract(const Duration(minutes: 42)),
-      ),
-      ActiveRecord(
-        sicilNo: '051902',
-        adSoyad: 'Elif Demir',
-        birim: 'A Blok',
-        bantAdi: 'Bant 2',
-        girisSaati: now.subtract(const Duration(hours: 1, minutes: 10)),
-      ),
-      ActiveRecord(
-        sicilNo: '039841',
-        adSoyad: 'Mehmet Kaya',
-        birim: 'B Blok',
-        bantAdi: 'Bant 1',
-        girisSaati: now.subtract(const Duration(minutes: 18)),
-      ),
-    ]);
-
-    raporGecmisi.addAll([
-      ReportLogEntry(
-        sentAt: now.subtract(const Duration(hours: 3)),
-        birim: 'A Blok',
-        recipients: const ['[email protected]', '[email protected]'],
-      ),
-      ReportLogEntry(
-        sentAt: now.subtract(const Duration(days: 1, hours: 2)),
-        birim: 'B Blok',
-        recipients: const ['[email protected]'],
-      ),
-    ]);
+  void setSession({
+    required String token,
+    required String rol,
+    int? birimNo,
+    required String sicilNo,
+  }) {
+    authToken = token;
+    currentRol = rol;
+    currentBirimNo = birimNo;
+    currentSicilNo = sicilNo;
+    notifyListeners();
   }
 
-  /// Şu an login olmuş bant şefinin birimi.
-  // TODO: gerçek uygulamada bu, login cevabından (JWT / sicil no'dan
-  // çözülen birim) gelecek. Henüz gerçek oturum/birim bilgisi olmadığı
-  // için ilk birim varsayılan olarak kullanılıyor.
-  BirimData get currentBirim => birimler.isNotEmpty
-      ? birimler.first
-      : BirimData(name: '—', bants: const []);
+  void clearSession() {
+    authToken = null;
+    currentRol = null;
+    currentBirimNo = null;
+    currentSicilNo = null;
+    birimler.clear();
+    personelListesi.clear();
+    aktifKayitlar.clear();
+    _birimNoByAdi.clear();
+    _bantNoByBirimVeAdi.clear();
+    notifyListeners();
+  }
+
+  // ---------------------------------------------------------------------
+  // Backend'den gerçek veri yükleme (login sonrası çağrılır)
+  // ---------------------------------------------------------------------
+
+  final Map<String, int> _birimNoByAdi = {};
+  final Map<String, Map<String, int>> _bantNoByBirimVeAdi = {};
+
+  Future<void> loadInitialData() async {
+    final token = authToken;
+    if (token == null) return;
+
+    final api = ApiService();
+    final birimlerData = await api.fetchBirimler(token);
+    final bantlarData = await api.fetchBantlar(token);
+    final personelData = await api.fetchPersonel(token);
+
+    _birimNoByAdi.clear();
+    _bantNoByBirimVeAdi.clear();
+    birimler.clear();
+    personelListesi.clear();
+
+    final birimAdiByNo = <int, String>{};
+    for (final b in birimlerData) {
+      final no = b['birim_no'] as int;
+      final adi = b['birim_adi'] as String;
+      birimAdiByNo[no] = adi;
+      _birimNoByAdi[adi] = no;
+    }
+
+    final bantsByBirimAdi = <String, List<String>>{};
+    for (final b in bantlarData) {
+      final birimNo = b['birim_no'] as int;
+      final bantNo = b['bant_no'] as int;
+      final bantAdi = b['bant_adi'] as String;
+      final birimAdi = birimAdiByNo[birimNo];
+      if (birimAdi == null) continue;
+
+      bantsByBirimAdi.putIfAbsent(birimAdi, () => []).add(bantAdi);
+      _bantNoByBirimVeAdi.putIfAbsent(birimAdi, () => {})[bantAdi] = bantNo;
+    }
+
+    for (final adi in _birimNoByAdi.keys) {
+      birimler.add(
+        BirimData(name: adi, bants: bantsByBirimAdi[adi] ?? const []),
+      );
+    }
+
+    for (final p in personelData) {
+      personelListesi.add(
+        Personel(
+          sicilNo: p['sicil_no'] as String,
+          adSoyad: p['ad_soyad'] as String,
+          birim: birimAdiByNo[p['birim_no']] ?? '',
+          bant: '',
+          rol: p['rol'] as String,
+          email: p['email'] as String?,
+          servisNo: p['servis_no'] as String?,
+        ),
+      );
+    }
+
+    notifyListeners();
+  }
+
+  BirimData get currentBirim {
+    if (currentBirimNo != null) {
+      final adi = _birimAdiFromNo(currentBirimNo!);
+      if (adi != null) {
+        final match = birimler.where((b) => b.name == adi);
+        if (match.isNotEmpty) return match.first;
+      }
+    }
+    return birimler.isNotEmpty
+        ? birimler.first
+        : BirimData(name: '—', bants: const []);
+  }
+
+  String? _birimAdiFromNo(int no) {
+    for (final entry in _birimNoByAdi.entries) {
+      if (entry.value == no) return entry.key;
+    }
+    return null;
+  }
 
   // ---------------------------------------------------------------------
   // Birim & Bant yönetimi
   // ---------------------------------------------------------------------
 
-  void addBirim(String name) {
-    // TODO: backend'e yeni birim oluşturma isteği gönderilecek.
-    birimler.add(BirimData(name: name, bants: const []));
-    notifyListeners();
+  Future<void> addBirim(String name) async {
+    final token = authToken;
+    if (token == null) {
+      throw const ScanException(
+          'Oturum bulunamadı, lütfen tekrar giriş yapın.');
+    }
+    try {
+      await ApiService().createBirim(token: token, birimAdi: name);
+    } catch (e) {
+      throw ScanException(e.toString().replaceFirst('Exception: ', ''));
+    }
+    await loadInitialData();
   }
 
-  void addBant(BirimData birim, String bantName) {
-    // TODO: backend'e yeni bant oluşturma isteği gönderilecek.
-    birim.bants.add(bantName);
-    notifyListeners();
+  Future<void> addBant(BirimData birim, String bantName) async {
+    final token = authToken;
+    if (token == null) {
+      throw const ScanException(
+          'Oturum bulunamadı, lütfen tekrar giriş yapın.');
+    }
+    final birimNo = _birimNoByAdi[birim.name];
+    if (birimNo == null) {
+      throw const ScanException('Birim bilgisi bulunamadı.');
+    }
+    try {
+      await ApiService().createBant(
+        token: token,
+        birimNo: birimNo,
+        bantAdi: bantName,
+      );
+    } catch (e) {
+      throw ScanException(e.toString().replaceFirst('Exception: ', ''));
+    }
+    await loadInitialData();
   }
-
-  // ---------------------------------------------------------------------
-  // Personel yönetimi
-  // ---------------------------------------------------------------------
 
   void updatePersonel(
     Personel personel, {
@@ -225,7 +250,6 @@ class AppData extends ChangeNotifier {
     required String bant,
     required String rol,
   }) {
-    // TODO: backend'e personel güncelleme isteği gönderilecek.
     personel.adSoyad = adSoyad;
     personel.birim = birim;
     personel.bant = bant;
@@ -234,8 +258,7 @@ class AppData extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------------
-  // Giriş / Çıkış kaydı — QR ekranı ve Manuel Giriş bu tek fonksiyonu
-  // paylaşıyor, ikisi de aynı sonucu üretiyor.
+  // Giriş / Çıkış kaydı
   // ---------------------------------------------------------------------
 
   Future<ScanResult> recordScan({
@@ -243,62 +266,158 @@ class AppData extends ChangeNotifier {
     required String birim,
     required String bant,
   }) async {
-    // TODO: gerçek backend entegrasyonu — bu mantık (kişiyi bulma, başka
-    // bantta aktifse otomatik çıkış kararı) sunucuda çalışacak; burada
-    // prototip için local olarak simüle ediliyor.
-    await Future.delayed(const Duration(milliseconds: 900));
+    final token = authToken;
+    if (token == null) {
+      throw const ScanException(
+          'Oturum bulunamadı, lütfen tekrar giriş yapın.');
+    }
 
-    // Önemli: personel listesinde kaydı olmayan biri de okutabilir (yeni
-    // işe başlayan, geçici personel vb.) — fabrikada akışı yavaşlatacak
-    // bir doğrulama/filtreleme yapmıyoruz, QR'daki sicil no bilgisini
-    // doğrudan kaydediyoruz. Listede varsa adı gösteriliyor, yoksa sicil
-    // no'nun kendisi "isim" alanında gösteriliyor ve isKnownPersonnel
-    // false olarak işaretleniyor (ekranda küçük bir bilgi notu için).
+    final bantNo = _bantNoByBirimVeAdi[birim]?[bant];
+    if (bantNo == null) {
+      throw const ScanException('Bant bilgisi bulunamadı.');
+    }
+
+    Map<String, dynamic> kayit;
+    try {
+      kayit = await ApiService().createKayit(
+        token: token,
+        sicilNo: sicilNo,
+        bantNo: bantNo,
+      );
+    } catch (e) {
+      throw ScanException(e.toString().replaceFirst('Exception: ', ''));
+    }
+
+    final isCikis = kayit['cikis_saati'] != null;
+
     final matches = personelListesi.where((p) => p.sicilNo == sicilNo);
     final isKnown = matches.isNotEmpty;
     final displayName = isKnown ? matches.first.adSoyad : sicilNo;
 
-    final existingIndex = aktifKayitlar.indexWhere((r) => r.sicilNo == sicilNo);
-    if (existingIndex >= 0) {
-      // Zaten aktif (başka bir bantta olsa bile) — otomatik çıkış.
-      aktifKayitlar.removeAt(existingIndex);
-      notifyListeners();
-      return ScanResult(
-        employeeName: displayName,
-        action: ScanAction.cikisYapildi,
-        isKnownPersonnel: isKnown,
+    aktifKayitlar.removeWhere((r) => r.sicilNo == sicilNo);
+    if (!isCikis) {
+      aktifKayitlar.add(
+        ActiveRecord(
+          sicilNo: sicilNo,
+          adSoyad: displayName,
+          birim: birim,
+          bantAdi: bant,
+          girisSaati: DateTime.parse(kayit['giris_saati'] as String),
+        ),
       );
     }
-
-    aktifKayitlar.add(
-      ActiveRecord(
-        sicilNo: sicilNo,
-        adSoyad: displayName,
-        birim: birim,
-        bantAdi: bant,
-        girisSaati: DateTime.now(),
-      ),
-    );
     notifyListeners();
+
     return ScanResult(
       employeeName: displayName,
-      action: ScanAction.girisYapildi,
+      action: isCikis ? ScanAction.cikisYapildi : ScanAction.girisYapildi,
       isKnownPersonnel: isKnown,
     );
+  }
+
+  Future<void> addPersonelBackend({
+    required String sicilNo,
+    required String adSoyad,
+    required String birim,
+    required String rol,
+    required String sifre,
+    String? email,
+    String? servisNo,
+  }) async {
+    final token = authToken;
+    if (token == null) {
+      throw const ScanException(
+          'Oturum bulunamadı, lütfen tekrar giriş yapın.');
+    }
+    final birimNo = _birimNoByAdi[birim];
+
+    try {
+      await ApiService().createPersonel(
+        token: token,
+        sicilNo: sicilNo,
+        adSoyad: adSoyad,
+        birimNo: birimNo,
+        rol: rol,
+        sifre: sifre,
+        email: email,
+        servisNo: servisNo,
+      );
+    } catch (e) {
+      throw ScanException(e.toString().replaceFirst('Exception: ', ''));
+    }
+
+    await loadInitialData();
+  }
+
+  Future<void> changePassword({
+    required String eskiSifre,
+    required String yeniSifre,
+  }) async {
+    final token = authToken;
+    if (token == null) {
+      throw const ScanException(
+          'Oturum bulunamadı, lütfen tekrar giriş yapın.');
+    }
+    try {
+      await ApiService().changePassword(
+        token: token,
+        eskiSifre: eskiSifre,
+        yeniSifre: yeniSifre,
+      );
+    } catch (e) {
+      throw ScanException(e.toString().replaceFirst('Exception: ', ''));
+    }
   }
 
   // ---------------------------------------------------------------------
   // Rapor gönderme
   // ---------------------------------------------------------------------
 
-  Future<void> sendReport(
-      {required String birim, required List<String> recipients}) async {
-    // TODO: backend'e mesai yoklama raporu gönderme isteği atılacak.
-    await Future.delayed(const Duration(milliseconds: 1200));
+  Future<bool> raporBugunGonderildiMi(String birim) async {
+    final token = authToken;
+    final birimNo = _birimNoByAdi[birim];
+    if (token == null || birimNo == null) return false;
+    try {
+      final durum = await ApiService().checkRaporDurumu(
+        token: token,
+        birimNo: birimNo,
+      );
+      return durum['bugun_gonderildi'] as bool;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> sendReport({
+    required String birim,
+    required List<String> recipients,
+    String? notMetni,
+  }) async {
+    final token = authToken;
+    if (token == null) {
+      throw const ScanException(
+          'Oturum bulunamadı, lütfen tekrar giriş yapın.');
+    }
+    final birimNo = _birimNoByAdi[birim];
+    if (birimNo == null) {
+      throw const ScanException('Birim bilgisi bulunamadı.');
+    }
+
+    List<String> gercekAliciler;
+    try {
+      gercekAliciler = await ApiService().sendReport(
+        token: token,
+        birimNo: birimNo,
+        notMetni: notMetni,
+      );
+    } catch (e) {
+      throw ScanException(e.toString().replaceFirst('Exception: ', ''));
+    }
+
     raporGecmisi.insert(
       0,
       ReportLogEntry(
-          sentAt: DateTime.now(), birim: birim, recipients: recipients),
+          sentAt: DateTime.now(), birim: birim, recipients: gercekAliciler),
     );
     notifyListeners();
   }

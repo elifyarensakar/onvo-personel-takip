@@ -27,6 +27,7 @@ class PersonelCreate(BaseModel):
     rol: str
     sifre: str = Field(min_length=8, max_length=16)
     servis_no: Optional[str] = None
+    email: Optional[str] = None
 
 class KayitCreate(BaseModel):
     sicil_no: str
@@ -59,6 +60,7 @@ class PersonelOut(BaseModel):
     birim_no: Optional[int] = None
     rol: str
     servis_no: Optional[str] = None
+    email: Optional[str] = None
     aktif: bool
 
     class Config:
@@ -82,3 +84,11 @@ class EkMesaiOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class RaporNotu(BaseModel):
+    not_metni: Optional[str] = None
+
+class SifreDegistir(BaseModel):
+    eski_sifre: str
+    yeni_sifre: str = Field(min_length=8, max_length=16)

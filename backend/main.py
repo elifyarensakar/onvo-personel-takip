@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
-from models import Birim , Bant , Personel , Kayit ,Ek_Mesai
+from models import Birim , Bant , Personel , Kayit ,Ek_Mesai, Rapor_Gonderim_Log
 from schemas import (
     BirimCreate, BirimOut ,
     BantCreate , BantOut,
@@ -14,8 +14,14 @@ from schemas import (
     KayitCreate, KayitOut,
     EkMesaiCreate, EkMesaiOut,
     PersonelSicilNo,
-    LoginRequest
+    LoginRequest,
+    RaporNotu,
+    SifreDegistir
     )
+from report import excel_dosyalari_olustur, ek_mesai_verisi_getir
+from mail import gunluk_rapor_maili_gonder, yonetici_maillerini_getir
+from datetime import date
+
 
 app = FastAPI()
 
@@ -79,6 +85,7 @@ def personel_ekle(personel: PersonelCreate, db: Session = Depends(get_db),kullan
         rol=personel.rol,
         sifre_hash=pwd_context.hash(personel.sifre),
         servis_no=personel.servis_no,
+        email=personel.email
     )
     db.add(yeni_personel)
     db.commit()
@@ -222,3 +229,74 @@ def kayit_listele(db: Session = Depends(get_db),kullanici: dict = Depends(rol_fi
 def ek_mesai_listele(db: Session = Depends(get_db),kullanici: dict = Depends(rol_filtreleme(["yonetici"]))):
     return db.query(Ek_Mesai).all()
 
+
+@app.get("/rapor-durumu/{birim_no}")
+def rapor_durumu(
+    birim_no: int,
+    db: Session = Depends(get_db),
+    kullanici: dict = Depends(rol_filtreleme(["yonetici", "bant_sefi"])),
+):
+    hedef_tarih = date.today()
+    sayi = db.query(Rapor_Gonderim_Log).filter(
+        Rapor_Gonderim_Log.birim_no == birim_no,
+        Rapor_Gonderim_Log.tarih == hedef_tarih,
+    ).count()
+    return {"bugun_gonderildi": sayi > 0, "gonderim_sayisi": sayi}
+
+
+@app.post("/rapor-gonder/{birim_no}")
+def rapor_gonder(
+    birim_no: int,
+    veri: RaporNotu = RaporNotu(),
+    db: Session = Depends(get_db),
+    kullanici: dict = Depends(rol_filtreleme(["yonetici", "bant_sefi"])),
+):
+    birim = db.query(Birim).filter(Birim.birim_no == birim_no).first()
+    if birim is None:
+        raise HTTPException(status_code=404, detail="Birim bulunamadı")
+
+    hedef_tarih = date.today()
+    aliciler = yonetici_maillerini_getir(db)
+
+    kayit_dosya, ek_mesai_dosya = excel_dosyalari_olustur(
+        db, birim_no, birim.birim_adi, hedef_tarih
+    )
+
+    ek_mesai_var = len(ek_mesai_verisi_getir(db, birim_no, hedef_tarih)) > 0
+    dosyalar = [kayit_dosya] + ([ek_mesai_dosya] if ek_mesai_var else [])
+
+    basarili = gunluk_rapor_maili_gonder(
+        db, birim.birim_adi, hedef_tarih, dosyalar, veri.not_metni
+    )
+
+    if not basarili:
+        raise HTTPException(status_code=502, detail="Mail gönderilemedi")
+
+    db.add(Rapor_Gonderim_Log(
+        birim_no=birim_no,
+        tarih=hedef_tarih,
+        saat=datetime.now(),
+        not_metni=veri.not_metni,
+    ))
+    db.commit()
+
+    return {"basarili": True, "aliciler": aliciler}
+
+@app.post("/personel/sifre-degistir")
+def sifre_degistir(
+    veri: SifreDegistir,
+    db: Session = Depends(get_db),
+    kullanici: dict = Depends(get_current_user),
+):
+    personel = db.query(Personel).filter(
+        Personel.sicil_no == kullanici["sicil_no"]
+    ).first()
+    if personel is None:
+        raise HTTPException(status_code=404, detail="Personel bulunamadı")
+
+    if not pwd_context.verify(veri.eski_sifre, personel.sifre_hash):
+        raise HTTPException(status_code=401, detail="Mevcut şifre hatalı")
+
+    personel.sifre_hash = pwd_context.hash(veri.yeni_sifre)
+    db.commit()
+    return {"basarili": True}

@@ -3,6 +3,8 @@ import '../theme/app_theme.dart';
 import 'login_screen.dart';
 import 'qr_scan_screen.dart';
 import 'stats_attendance_screen.dart';
+import '../widgets/change_password_dialog.dart';
+import 'personnel_list_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -129,6 +131,15 @@ class HomeScreen extends StatelessWidget {
                                         ),
                                       ),
                                       IconButton(
+                                        onPressed: () =>
+                                            showChangePasswordDialog(context),
+                                        icon: const Icon(
+                                          Icons.password_rounded,
+                                          color: AppColors.muted,
+                                        ),
+                                        tooltip: 'Şifre değiştir',
+                                      ),
+                                      IconButton(
                                         onPressed: () => _handleLogout(context),
                                         icon: const Icon(
                                           Icons.logout_rounded,
@@ -163,6 +174,21 @@ class HomeScreen extends StatelessWidget {
                                         MaterialPageRoute(
                                           builder: (_) =>
                                               const StatsAttendanceScreen(),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                  const SizedBox(height: 14),
+                                  _HomeOptionCard(
+                                    icon: Icons.groups_rounded,
+                                    title: 'Personel Listesi',
+                                    subtitle:
+                                        'Biriminizde kayıtlı personeli görüntüleyin',
+                                    onTap: () {
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              const PersonnelListScreen(),
                                         ),
                                       );
                                     },

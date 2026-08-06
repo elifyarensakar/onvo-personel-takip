@@ -5,6 +5,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from models import Personel
 
+
 load_dotenv(dotenv_path=Path(__file__).parent / ".env")
 
 SMTP_HOST = os.getenv("SMTP_HOST")
@@ -22,8 +23,7 @@ def yonetici_maillerini_getir(db):
     return [r[0] for r in sonuc]
 
 
-def gunluk_rapor_maili_gonder(db, birim_adi, hedef_tarih, dosya_yollari):
-   
+def gunluk_rapor_maili_gonder(db, birim_adi, hedef_tarih, dosya_yollari, not_metni=None):
     aliciler = yonetici_maillerini_getir(db)
     if not aliciler:
         print(f"[UYARI] {birim_adi} için mail gönderilecek yönetici bulunamadı.")
@@ -35,9 +35,11 @@ def gunluk_rapor_maili_gonder(db, birim_adi, hedef_tarih, dosya_yollari):
     msg["Subject"] = f"{birim_adi} - Günlük Personel Takip Raporu ({tarih_str})"
     msg["From"] = SMTP_USER
     msg["To"] = ", ".join(aliciler)
-    msg.set_content(
-        f"{birim_adi} birimine ait {tarih_str} tarihli günlük personel takip raporu ektedir."
-    )
+
+    govde = f"{birim_adi} birimine ait {tarih_str} tarihli günlük personel takip raporu ektedir."
+    if not_metni:
+        govde += f"\n\nNot: {not_metni}"
+    msg.set_content(govde)
 
     for dosya_yolu in dosya_yollari:
         yol = Path(dosya_yolu)
@@ -59,3 +61,5 @@ def gunluk_rapor_maili_gonder(db, birim_adi, hedef_tarih, dosya_yollari):
     except Exception as e:
         print(f"[HATA] {birim_adi} raporu gönderilemedi: {e}")
         return False
+    
+
