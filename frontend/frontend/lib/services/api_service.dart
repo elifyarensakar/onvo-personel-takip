@@ -17,7 +17,8 @@ class LoginResult {
 }
 
 class ApiService {
-  static const String baseUrl = 'http://10.0.2.2:8000';
+  static const String baseUrl =
+      'https://unrushed-pester-plethora.ngrok-free.dev';
 
   Map<String, String> _authHeaders(String token) => {
         'Content-Type': 'application/json',
