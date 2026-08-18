@@ -7,7 +7,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 db = SessionLocal()
 
 ilk_yonetici = Personel(
-    sicil_no="1234/1234",
+    sicil_no="1234",
     ad_soyad="Sıla Başkaya",
     birim_no=1,
     rol="yonetici",

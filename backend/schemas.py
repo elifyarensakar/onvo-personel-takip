@@ -29,9 +29,18 @@ class PersonelCreate(BaseModel):
     servis_no: Optional[str] = None
     email: Optional[str] = None
 
+class PersonelUpdate(BaseModel):
+    ad_soyad: str
+    birim_no: Optional[int] = None
+    rol: str
+    servis_no: Optional[str] = None
+    email: Optional[str] = None
+
 class KayitCreate(BaseModel):
     sicil_no: str
     bant_no: int
+    ad_soyad: Optional[str] = None
+    servis_no: Optional[str] = None
 
 class EkMesaiCreate(BaseModel):
     sicil_no: str
