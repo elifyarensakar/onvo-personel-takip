@@ -43,14 +43,19 @@ def gun_sonu_kapat():
         aktif_kayitlar = db.query(Kayit).filter(Kayit.cikis_saati == None).all()
 
         for kayit in aktif_kayitlar:
-            kayit.cikis_saati = datetime.now().replace(hour=17, minute=0, second=0, microsecond=0)
+            if kayit.giris_saati.weekday()==4:
+                 kayit.cikis_saati = datetime.now().replace(hour=17, minute=30, second=0, microsecond=0)
+            else:
+                 kayit.cikis_saati = datetime.now().replace(hour=17, minute=0, second=0, microsecond=0)    
+           
 
         db.commit()
     finally:
         db.close()
 
 scheduler = BackgroundScheduler()
-scheduler.add_job(gun_sonu_kapat, "cron", hour=17, minute=00)
+scheduler.add_job(gun_sonu_kapat, "cron", day_of_week="mon-thu", hour=17, minute=0)
+scheduler.add_job(gun_sonu_kapat, "cron", day_of_week="fri", hour=17, minute=30)
 scheduler.start()
 
 
