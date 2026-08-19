@@ -52,8 +52,7 @@ def gunluk_rapor_maili_gonder(db, birim_adi, hedef_tarih, dosya_yollari, not_met
             )
 
     try:
-        with smtplib.SMTP(SMTP_HOST, int(SMTP_PORT)) as server:
-            server.starttls()
+        with smtplib.SMTP_SSL(SMTP_HOST, int(SMTP_PORT)) as server:
             server.login(SMTP_USER, SMTP_PASSWORD)
             server.send_message(msg)
         print(f"[OK] {birim_adi} raporu {len(aliciler)} yöneticiye gönderildi.")
