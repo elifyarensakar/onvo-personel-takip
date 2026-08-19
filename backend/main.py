@@ -1,4 +1,5 @@
 from fastapi import FastAPI , Depends
+import secrets
 from auth import token_olustur, get_current_user, rol_filtreleme
 from sqlalchemy.orm import Session
 from database import SessionLocal
@@ -10,7 +11,7 @@ from models import Birim , Bant , Personel , Kayit ,Ek_Mesai, Rapor_Gonderim_Log
 from schemas import (
     BirimCreate, BirimOut ,
     BantCreate , BantOut,
-    PersonelCreate, PersonelOut,
+    PersonelCreate, PersonelOut, PersonelUpdate,
     KayitCreate, KayitOut,
     EkMesaiCreate, EkMesaiOut,
     PersonelSicilNo,
@@ -42,14 +43,19 @@ def gun_sonu_kapat():
         aktif_kayitlar = db.query(Kayit).filter(Kayit.cikis_saati == None).all()
 
         for kayit in aktif_kayitlar:
-            kayit.cikis_saati = datetime.now().replace(hour=17, minute=0, second=0, microsecond=0)
+            if kayit.giris_saati.weekday()==4:
+                 kayit.cikis_saati = datetime.now().replace(hour=17, minute=30, second=0, microsecond=0)
+            else:
+                 kayit.cikis_saati = datetime.now().replace(hour=17, minute=0, second=0, microsecond=0)    
+           
 
         db.commit()
     finally:
         db.close()
 
 scheduler = BackgroundScheduler()
-scheduler.add_job(gun_sonu_kapat, "cron", hour=17, minute=00)
+scheduler.add_job(gun_sonu_kapat, "cron", day_of_week="mon-thu", hour=17, minute=0)
+scheduler.add_job(gun_sonu_kapat, "cron", day_of_week="fri", hour=17, minute=30)
 scheduler.start()
 
 
@@ -92,8 +98,47 @@ def personel_ekle(personel: PersonelCreate, db: Session = Depends(get_db),kullan
     db.refresh(yeni_personel)
     return yeni_personel
 
+@app.put("/personel/{sicil_no}", response_model=PersonelOut)
+def personel_guncelle(sicil_no: str, personel: PersonelUpdate, db: Session = Depends(get_db), kullanici: dict = Depends(rol_filtreleme(["yonetici"]))):
+    mevcut = db.query(Personel).filter(Personel.sicil_no == sicil_no).first()
+    if mevcut is None:
+        raise HTTPException(status_code=404, detail="Personel bulunamadı.")
+
+    if personel.rol != "calisan" and personel.birim_no is None:
+        raise HTTPException(
+            status_code=400,
+            detail="bant_sefi ve yonetici rolündeki personelin bir birime atanmış olması gerekir."
+        )
+
+    mevcut.ad_soyad = personel.ad_soyad
+    mevcut.birim_no = personel.birim_no
+    mevcut.rol = personel.rol
+    mevcut.servis_no = personel.servis_no
+    mevcut.email = personel.email
+    db.commit()
+    db.refresh(mevcut)
+    return mevcut
+
 @app.post("/kayit", response_model=KayitOut)
 def kayit_ekle(kayit: KayitCreate, db: Session = Depends(get_db),kullanici: dict = Depends(rol_filtreleme(["yonetici","bant_sefi"]))):
+
+    # Sicil no Personel tablosunda yoksa: QR'dan gelen ad_soyad/servis_no ile
+    # otomatik, minimal bir Personel kaydı oluşturuluyor (rol='calisan',
+    # birim_no boş bırakılıyor — proje kararınca calisan rolü için birim
+    # zorunlu değil). Bu kişi login yapamaz (rastgele/kullanılamaz bir şifre
+    # hash'i atanıyor), sadece giriş/çıkış kaydı tutulabilsin diye var.
+    mevcut_personel = db.query(Personel).filter(Personel.sicil_no == kayit.sicil_no).first()
+    if mevcut_personel is None:
+        otomatik_personel = Personel(
+            sicil_no=kayit.sicil_no,
+            ad_soyad=kayit.ad_soyad or kayit.sicil_no,
+            birim_no=None,
+            rol="calisan",
+            sifre_hash=pwd_context.hash(secrets.token_urlsafe(24)),
+            servis_no=kayit.servis_no,
+        )
+        db.add(otomatik_personel)
+        db.commit()
 
     aktif_kayit = db.query(Kayit).filter(
         Kayit.sicil_no == kayit.sicil_no,
@@ -221,7 +266,7 @@ def personel_listele(db: Session = Depends(get_db) ,kullanici: dict = Depends(ro
         return db.query(Personel).filter(Personel.birim_no == kullanici["birim_no"]).all()
 
 @app.get("/kayit", response_model=list[KayitOut])
-def kayit_listele(db: Session = Depends(get_db),kullanici: dict = Depends(rol_filtreleme(["yonetici"]))):
+def kayit_listele(db: Session = Depends(get_db),kullanici: dict = Depends(rol_filtreleme(["yonetici","bant_sefi"]))):
     return db.query(Kayit).all()
 
 
