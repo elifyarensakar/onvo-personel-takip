@@ -9,6 +9,44 @@ import 'manual_entry_screen.dart';
 
 enum _ScanPhase { scanning, success, error }
 
+/// QR kodun içeriği bant şefi uygulamasında "Ad Soyad: ...", "Sicil No: ...",
+/// "Servis No: ..." alanlarını içeriyor. Bu alanlar bazen satır sonuyla
+/// (\n) bazen sadece boşlukla ayrılmış geliyor — bu yüzden her alanı, bir
+/// sonraki etiket başlayana (ya da metin bitene) kadar okuyoruz; sadece
+/// metnin sonuna kadar almıyoruz (aksi halde bir alan diğerlerini içine
+/// yutar).
+const _sicilNoLabel = r'Sicil\s*No\s*:';
+const _adSoyadLabel = r'Ad\s*Soyad\s*:';
+const _servisNoLabel = r'Servis\s*No\s*:';
+const _herhangiEtiket =
+    '(?:$_sicilNoLabel|$_adSoyadLabel|$_servisNoLabel|\$)';
+
+String _extractField(String rawValue, String label) {
+  final match =
+      RegExp('$label\\s*(.*?)\\s*$_herhangiEtiket').firstMatch(rawValue);
+  return match?.group(1)?.trim() ?? '';
+}
+
+/// "Sicil No:" satırındaki değeri ayıklar; format eşleşmezse (örn. eski/
+/// farklı bir QR) tüm metni olduğu gibi sicil no kabul eder — geriye
+/// dönük uyumluluk için.
+String _extractSicilNo(String rawValue) {
+  final value = _extractField(rawValue, _sicilNoLabel);
+  return value.isNotEmpty ? value : rawValue.trim();
+}
+
+/// "Ad Soyad:" satırındaki değeri ayıklar, yoksa null döner.
+String? _extractAdSoyad(String rawValue) {
+  final value = _extractField(rawValue, _adSoyadLabel);
+  return value.isNotEmpty ? value : null;
+}
+
+/// "Servis No:" satırındaki değeri ayıklar, yoksa null döner.
+String? _extractServisNo(String rawValue) {
+  final value = _extractField(rawValue, _servisNoLabel);
+  return value.isNotEmpty ? value : null;
+}
+
 class QrScanScreen extends StatefulWidget {
   const QrScanScreen({super.key});
 
@@ -98,9 +136,11 @@ class _QrScanScreenState extends State<QrScanScreen>
       // reddedilmiyor — QR'daki bilgi doğrudan kaydediliyor (bkz. AppData.
       // recordScan). Fabrikada akışı yavaşlatacak bir doğrulama yapılmıyor.
       final result = await appData.recordScan(
-        sicilNo: rawValue,
+        sicilNo: _extractSicilNo(rawValue),
         birim: appData.currentBirim.name,
         bant: effectiveBant,
+        adSoyad: _extractAdSoyad(rawValue),
+        servisNo: _extractServisNo(rawValue),
       );
       if (!mounted) return;
       setState(() {

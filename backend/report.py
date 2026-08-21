@@ -20,6 +20,7 @@ def kayit_verisi_getir(db, hedef_birim, hedef_tarih):
     sonuc = db.query(
         Kayit.sicil_no,
         Personel.ad_soyad,
+        Personel.servis_no, 
         Bant.bant_adi,
         Kayit.giris_saati,
         Kayit.cikis_saati
@@ -34,6 +35,7 @@ def ek_mesai_verisi_getir(db, hedef_birim, hedef_tarih):
     sonuc = db.query(
         Ek_Mesai.sicil_no,
         Personel.ad_soyad,
+        Personel.servis_no,
         Ek_Mesai.baslangic_saati,
         Ek_Mesai.bitis_saati
     ).join(Personel, Ek_Mesai.sicil_no == Personel.sicil_no
@@ -45,14 +47,16 @@ def ek_mesai_verisi_getir(db, hedef_birim, hedef_tarih):
 
 def kayit_raporu_olustur(db, hedef_birim, hedef_tarih):
     veri = kayit_verisi_getir(db, hedef_birim, hedef_tarih)
-    df = pd.DataFrame(veri, columns=["sicil_no", "ad_soyad", "bant_adi", "giris_saati", "cikis_saati"])  
+    df = pd.DataFrame(veri, columns=["sicil_no", "ad_soyad","servis_no", "bant_adi", "giris_saati", "cikis_saati"])  
     df["cikis_saati"] = df["cikis_saati"].fillna("Aktif")
+    df["servis_no"] = df["servis_no"].fillna("Servis Yok")
     return df
 
 def ek_mesai_raporu_olustur(db, hedef_birim, hedef_tarih):
     veri = ek_mesai_verisi_getir(db, hedef_birim, hedef_tarih)
-    df = pd.DataFrame(veri, columns=["sicil_no", "ad_soyad", "baslangic_saati", "bitis_saati"])  
+    df = pd.DataFrame(veri, columns=["sicil_no", "ad_soyad","servis_no","baslangic_saati", "bitis_saati"])  
     df["bitis_saati"] = df["bitis_saati"].fillna("Aktif")
+    df["servis_no"] = df["servis_no"].fillna("Servis Yok")
     return df
 
 def excel_dosyalari_olustur(db, hedef_birim, birim_adi, hedef_tarih):

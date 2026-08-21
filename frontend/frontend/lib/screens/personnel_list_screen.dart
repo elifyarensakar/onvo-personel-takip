@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../state/app_data.dart';
 import '../theme/app_theme.dart';
+import '../widgets/centered_scroll_content.dart';
 
 const Map<String, String> _personnelListRolLabels = {
   'calisan': 'Çalışan',
@@ -39,7 +40,7 @@ class PersonnelListScreen extends StatelessWidget {
         child: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final isWide = constraints.maxWidth > 480;
+              const isWide = false; // Tablet dahil her ekranda tam genişlik/köşesiz görünüm için kapatıldı.
 
               return Center(
                 child: ConstrainedBox(
@@ -70,7 +71,7 @@ class PersonnelListScreen extends StatelessWidget {
                     child: Column(
                       children: [
                         Expanded(
-                          child: SingleChildScrollView(
+                          child: CenteredScrollContent(
                             child: Padding(
                               padding: const EdgeInsets.fromLTRB(22, 8, 22, 24),
                               child: Column(

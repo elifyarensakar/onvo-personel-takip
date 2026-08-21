@@ -18,8 +18,7 @@ class LoginResult {
 
 class ApiService {
   static const String baseUrl =
-      'https://unrushed-pester-plethora.ngrok-free.dev';
-
+      'http://172.17.49.24:8000'; 
   Map<String, String> _authHeaders(String token) => {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
@@ -80,15 +79,33 @@ class ApiService {
     return List<Map<String, dynamic>>.from(jsonDecode(response.body));
   }
 
+  Future<List<Map<String, dynamic>>> fetchKayitlar(String token) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/kayit'),
+      headers: _authHeaders(token),
+    );
+    if (response.statusCode != 200) {
+      throw Exception(_extractDetail(response.body, 'Kayıtlar alınamadı'));
+    }
+    return List<Map<String, dynamic>>.from(jsonDecode(response.body));
+  }
+
   Future<Map<String, dynamic>> createKayit({
     required String token,
     required String sicilNo,
     required int bantNo,
+    String? adSoyad,
+    String? servisNo,
   }) async {
     final response = await http.post(
       Uri.parse('$baseUrl/kayit'),
       headers: _authHeaders(token),
-      body: jsonEncode({'sicil_no': sicilNo, 'bant_no': bantNo}),
+      body: jsonEncode({
+        'sicil_no': sicilNo,
+        'bant_no': bantNo,
+        'ad_soyad': adSoyad,
+        'servis_no': servisNo,
+      }),
     );
 
     if (response.statusCode == 200) {
@@ -123,6 +140,48 @@ class ApiService {
 
     if (response.statusCode != 200) {
       throw Exception(_extractDetail(response.body, 'Personel eklenemedi'));
+    }
+  }
+
+  Future<void> updatePersonel({
+    required String token,
+    required String sicilNo,
+    required String adSoyad,
+    required int? birimNo,
+    required String rol,
+    String? email,
+    String? servisNo,
+  }) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/personel/$sicilNo'),
+      headers: _authHeaders(token),
+      body: jsonEncode({
+        'ad_soyad': adSoyad,
+        'birim_no': birimNo,
+        'rol': rol,
+        'email': email,
+        'servis_no': servisNo,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(_extractDetail(response.body, 'Personel güncellenemedi'));
+    }
+  }
+
+  Future<void> togglePersonelAktif({
+    required String token,
+    required String sicilNo,
+  }) async {
+    final response = await http.patch(
+      Uri.parse('$baseUrl/personel/aktif'),
+      headers: _authHeaders(token),
+      body: jsonEncode({'sicil_no': sicilNo}),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+          _extractDetail(response.body, 'Personel durumu değiştirilemedi'));
     }
   }
 

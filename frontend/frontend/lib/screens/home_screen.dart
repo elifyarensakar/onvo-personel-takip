@@ -5,6 +5,7 @@ import 'qr_scan_screen.dart';
 import 'stats_attendance_screen.dart';
 import '../widgets/change_password_dialog.dart';
 import 'personnel_list_screen.dart';
+import '../widgets/centered_scroll_content.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -74,7 +75,7 @@ class HomeScreen extends StatelessWidget {
         child: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final isWide = constraints.maxWidth > 480;
+              const isWide = false; // Tablet dahil her ekranda tam genişlik/köşesiz görünüm için kapatıldı.
 
               return Center(
                 child: ConstrainedBox(
@@ -105,7 +106,7 @@ class HomeScreen extends StatelessWidget {
                     child: Column(
                       children: [
                         Expanded(
-                          child: SingleChildScrollView(
+                          child: CenteredScrollContent(
                             child: Padding(
                               padding:
                                   const EdgeInsets.fromLTRB(22, 20, 22, 24),

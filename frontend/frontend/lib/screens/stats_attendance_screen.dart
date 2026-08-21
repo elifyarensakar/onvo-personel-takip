@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../state/app_data.dart';
 import '../theme/app_theme.dart';
 import '../widgets/onvo_primary_button.dart';
+import '../widgets/centered_scroll_content.dart';
 
 class StatsAttendanceScreen extends StatefulWidget {
   const StatsAttendanceScreen({super.key});
@@ -144,7 +145,7 @@ class _StatsAttendanceScreenState extends State<StatsAttendanceScreen> {
         child: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final isWide = constraints.maxWidth > 480;
+              const isWide = false; // Tablet dahil her ekranda tam genişlik/köşesiz görünüm için kapatıldı.
 
               return Center(
                 child: ConstrainedBox(
@@ -175,7 +176,7 @@ class _StatsAttendanceScreenState extends State<StatsAttendanceScreen> {
                     child: Column(
                       children: [
                         Expanded(
-                          child: SingleChildScrollView(
+                          child: CenteredScrollContent(
                             child: Padding(
                               padding:
                                   const EdgeInsets.fromLTRB(22, 20, 22, 24),

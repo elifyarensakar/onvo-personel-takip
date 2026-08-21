@@ -4,6 +4,7 @@ import '../state/app_data.dart';
 import '../theme/app_theme.dart';
 import '../widgets/onvo_primary_button.dart';
 import '../widgets/onvo_text_field.dart';
+import '../widgets/centered_scroll_content.dart';
 
 /// QR okuyucu arızalandığında bant şefinin sicil no girerek manuel olarak
 /// giriş/çıkış kaydı oluşturabildiği ekran. QR ekranıyla aynı paylaşılan
@@ -105,7 +106,7 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
         child: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final isWide = constraints.maxWidth > 480;
+              const isWide = false; // Tablet dahil her ekranda tam genişlik/köşesiz görünüm için kapatıldı.
 
               return Center(
                 child: ConstrainedBox(
@@ -136,7 +137,7 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                     child: Column(
                       children: [
                         Expanded(
-                          child: SingleChildScrollView(
+                          child: CenteredScrollContent(
                             child: Padding(
                               padding: const EdgeInsets.fromLTRB(22, 8, 22, 24),
                               child: Column(
