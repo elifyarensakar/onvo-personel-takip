@@ -8,6 +8,7 @@ import 'home_screen.dart';
 import 'package:provider/provider.dart';
 import '../services/api_service.dart';
 import '../state/app_data.dart';
+import '../widgets/centered_scroll_content.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -90,7 +91,7 @@ class _LoginScreenState extends State<LoginScreen> {
         child: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final isWide = constraints.maxWidth > 480;
+              const isWide = false; // Tablet dahil her ekranda tam genişlik/köşesiz görünüm için kapatıldı.
 
               return Center(
                 child: ConstrainedBox(
@@ -130,7 +131,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: Column(
                       children: [
                         Expanded(
-                          child: SingleChildScrollView(
+                          child: CenteredScrollContent(
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [

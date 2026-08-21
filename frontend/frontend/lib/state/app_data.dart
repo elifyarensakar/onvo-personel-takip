@@ -39,6 +39,7 @@ class Personel {
     required this.rol,
     this.email,
     this.servisNo,
+    this.aktif = true,
   });
 
   final String sicilNo;
@@ -48,6 +49,7 @@ class Personel {
   String rol;
   String? email;
   String? servisNo;
+  bool aktif;
 }
 
 class ActiveRecord {
@@ -176,8 +178,48 @@ class AppData extends ChangeNotifier {
           rol: p['rol'] as String,
           email: p['email'] as String?,
           servisNo: p['servis_no'] as String?,
+          aktif: p['aktif'] as bool? ?? true,
         ),
       );
+    }
+
+    // bant_no -> (birim_adi, bant_adi) ters eşleştirmesi — Kayit'lardaki
+    // bant_no'yu ekranda gösterilecek isimlere çevirmek için.
+    final bantNoToBirimVeAdi = <int, ({String birim, String bant})>{};
+    for (final birimAdi in _bantNoByBirimVeAdi.keys) {
+      for (final entry in _bantNoByBirimVeAdi[birimAdi]!.entries) {
+        bantNoToBirimVeAdi[entry.value] = (birim: birimAdi, bant: entry.key);
+      }
+    }
+    final adSoyadBySicilNo = {
+      for (final p in personelListesi) p.sicilNo: p.adSoyad,
+    };
+
+    // Rol 'yonetici' olmayan kullanıcılar (bant_sefi/calisan) için GET
+    // /kayit yetkisiz (403) döner — bu durumda aktif kayıtlar sadece o
+    // oturumda yapılan taramalarla dolar, hata olarak ele alınmaz.
+    try {
+      final kayitlarData = await api.fetchKayitlar(token);
+      aktifKayitlar.clear();
+      for (final k in kayitlarData) {
+        if (k['cikis_saati'] != null) continue; // sadece hâlâ aktif olanlar
+        final bantNo = k['bant_no'] as int;
+        final konum = bantNoToBirimVeAdi[bantNo];
+        if (konum == null) continue;
+        final sicilNo = k['sicil_no'] as String;
+        aktifKayitlar.add(
+          ActiveRecord(
+            sicilNo: sicilNo,
+            adSoyad: adSoyadBySicilNo[sicilNo] ?? sicilNo,
+            birim: konum.birim,
+            bantAdi: konum.bant,
+            girisSaati: DateTime.parse(k['giris_saati'] as String),
+          ),
+        );
+      }
+    } catch (_) {
+      // Yetkisiz rol ya da geçici hata — sessizce geç, aktifKayitlar
+      // mevcut (o oturumdaki) hâliyle kalır.
     }
 
     notifyListeners();
@@ -243,18 +285,63 @@ class AppData extends ChangeNotifier {
     await loadInitialData();
   }
 
-  void updatePersonel(
+  Future<void> updatePersonel(
     Personel personel, {
     required String adSoyad,
     required String birim,
     required String bant,
     required String rol,
-  }) {
-    personel.adSoyad = adSoyad;
-    personel.birim = birim;
+    String? email,
+    String? servisNo,
+  }) async {
+    final token = authToken;
+    if (token == null) {
+      throw const ScanException(
+          'Oturum bulunamadı, lütfen tekrar giriş yapın.');
+    }
+    final birimNo = _birimNoByAdi[birim];
+
+    try {
+      await ApiService().updatePersonel(
+        token: token,
+        sicilNo: personel.sicilNo,
+        adSoyad: adSoyad,
+        birimNo: birimNo,
+        rol: rol,
+        email: email,
+        servisNo: servisNo,
+      );
+    } catch (e) {
+      throw ScanException(e.toString().replaceFirst('Exception: ', ''));
+    }
+
+    // NOT: 'bant' backend'e gönderilmiyor — Personel tablosunda sabit bir
+    // bant alanı yok (proje kararı: personelin sabit birimi var, sabit
+    // bandı yok; bant bilgisi her giriş kaydında ayrı tutulur). Bu alan
+    // burada yerelde (mock) güncellenmeye devam ediyor, sadece ekran
+    // görünümü için.
     personel.bant = bant;
-    personel.rol = rol;
-    notifyListeners();
+
+    await loadInitialData();
+  }
+
+  Future<void> togglePersonelAktif(Personel personel) async {
+    final token = authToken;
+    if (token == null) {
+      throw const ScanException(
+          'Oturum bulunamadı, lütfen tekrar giriş yapın.');
+    }
+
+    try {
+      await ApiService().togglePersonelAktif(
+        token: token,
+        sicilNo: personel.sicilNo,
+      );
+    } catch (e) {
+      throw ScanException(e.toString().replaceFirst('Exception: ', ''));
+    }
+
+    await loadInitialData();
   }
 
   // ---------------------------------------------------------------------
@@ -265,6 +352,8 @@ class AppData extends ChangeNotifier {
     required String sicilNo,
     required String birim,
     required String bant,
+    String? adSoyad,
+    String? servisNo,
   }) async {
     final token = authToken;
     if (token == null) {
@@ -283,6 +372,8 @@ class AppData extends ChangeNotifier {
         token: token,
         sicilNo: sicilNo,
         bantNo: bantNo,
+        adSoyad: adSoyad,
+        servisNo: servisNo,
       );
     } catch (e) {
       throw ScanException(e.toString().replaceFirst('Exception: ', ''));
@@ -292,7 +383,12 @@ class AppData extends ChangeNotifier {
 
     final matches = personelListesi.where((p) => p.sicilNo == sicilNo);
     final isKnown = matches.isNotEmpty;
-    final displayName = isKnown ? matches.first.adSoyad : sicilNo;
+    // Personel listesinde henüz yoksa (örn. QR ile az önce otomatik
+    // oluşturulduysa, liste bir sonraki yenilemeye kadar bunu bilmez) ama
+    // QR'dan bir ad_soyad geldiyse, sicil no yerine onu göster.
+    final displayName = isKnown
+        ? matches.first.adSoyad
+        : (adSoyad != null && adSoyad.trim().isNotEmpty ? adSoyad : sicilNo);
 
     aktifKayitlar.removeWhere((r) => r.sicilNo == sicilNo);
     if (!isCikis) {

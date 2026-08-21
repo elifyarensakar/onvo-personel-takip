@@ -4,6 +4,7 @@ import '../state/app_data.dart';
 import '../theme/app_theme.dart';
 import '../widgets/onvo_primary_button.dart';
 import 'login_screen.dart';
+import '../widgets/centered_scroll_content.dart';
 
 // ---------------------------------------------------------------------------
 // Bu ekrana özel yardımcı tipler (paylaşılan veri modelleri artık
@@ -17,12 +18,16 @@ class _PersonelEditResult {
     required this.birim,
     required this.bant,
     required this.rol,
+    this.email,
+    this.servisNo,
   });
 
   final String adSoyad;
   final String birim;
   final String bant;
   final String rol;
+  final String? email;
+  final String? servisNo;
 }
 
 const Map<String, String> _rolLabels = {
@@ -184,8 +189,17 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
 
   _AdminTab _selectedTab = _AdminTab.overview;
   String _selectedBirimFilter = 'Tüm Birimler';
+  String _personelBirimFilter = 'Tüm Birimler';
+  String _personelAramaMetni = '';
+  final _personelAramaController = TextEditingController();
   bool _isRefreshing = false;
   bool _isAddingPersonel = false;
+
+  @override
+  void dispose() {
+    _personelAramaController.dispose();
+    super.dispose();
+  }
 
   String _formatToday() {
     final now = DateTime.now();
@@ -325,15 +339,29 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
           _EditPersonelSheet(personel: personel, birimler: birimler),
     );
 
-    if (result != null && mounted) {
-      context.read<AppData>().updatePersonel(
+    if (result == null || !mounted) return;
+
+    setState(() => _isAddingPersonel = true);
+    try {
+      await context.read<AppData>().updatePersonel(
             personel,
             adSoyad: result.adSoyad,
             birim: result.birim,
             bant: result.bant,
             rol: result.rol,
+            email: result.email,
+            servisNo: result.servisNo,
           );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceFirst('ScanException: ', '')),
+          ),
+        );
+      }
     }
+    if (mounted) setState(() => _isAddingPersonel = false);
   }
 
   Future<void> _showAddPersonelSheet(List<BirimData> birimler) async {
@@ -379,7 +407,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         child: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final isWide = constraints.maxWidth > 480;
+              const isWide = false; // Tablet dahil her ekranda tam genişlik/köşesiz görünüm için kapatıldı.
 
               return Center(
                 child: ConstrainedBox(
@@ -410,7 +438,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                     child: Column(
                       children: [
                         Expanded(
-                          child: SingleChildScrollView(
+                          child: CenteredScrollContent(
                             child: Padding(
                               padding:
                                   const EdgeInsets.fromLTRB(22, 20, 22, 24),
@@ -696,17 +724,20 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   }
 
   Widget _buildPersonnelTab(AppData appData) {
+    final filtrelenmisListe = appData.personelListesi.where((personel) {
+      final aktifUyuyor = personel.aktif;
+      final birimUyuyor = _personelBirimFilter == 'Tüm Birimler' ||
+          personel.birim == _personelBirimFilter;
+      final arama = _personelAramaMetni.trim().toLowerCase();
+      final aramaUyuyor = arama.isEmpty ||
+          personel.adSoyad.toLowerCase().contains(arama) ||
+          personel.sicilNo.toLowerCase().contains(arama);
+      return aktifUyuyor && birimUyuyor && aramaUyuyor;
+    }).toList();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final personel in appData.personelListesi) ...[
-          _PersonelRow(
-            personel: personel,
-            onTap: () => _showEditPersonelSheet(personel, appData.birimler),
-          ),
-          const SizedBox(height: 10),
-        ],
-        const SizedBox(height: 4),
         OutlinedButton.icon(
           onPressed: _isAddingPersonel
               ? null
@@ -723,6 +754,70 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           ),
         ),
+        const SizedBox(height: 14),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceTint,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.line),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.filter_list_rounded,
+                  size: 18, color: AppColors.muted),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _dropdownField(
+                  value: _personelBirimFilter,
+                  items: appData.birimFilterOptions,
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() => _personelBirimFilter = value);
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _personelAramaController,
+          onChanged: (value) => setState(() => _personelAramaMetni = value),
+          decoration: _fieldDecoration().copyWith(
+            hintText: 'Sicil no veya ad soyad ara...',
+            prefixIcon: const Icon(Icons.search_rounded,
+                size: 20, color: AppColors.muted),
+            suffixIcon: _personelAramaMetni.isEmpty
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.close_rounded,
+                        size: 18, color: AppColors.muted),
+                    onPressed: () {
+                      _personelAramaController.clear();
+                      setState(() => _personelAramaMetni = '');
+                    },
+                  ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        if (filtrelenmisListe.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: Text('Eşleşen personel bulunamadı.',
+                  style: AppText.subtext),
+            ),
+          )
+        else
+          for (final personel in filtrelenmisListe) ...[
+            _PersonelRow(
+              personel: personel,
+              onTap: () => _showEditPersonelSheet(personel, appData.birimler),
+            ),
+            const SizedBox(height: 10),
+          ],
       ],
     );
   }
@@ -910,66 +1005,95 @@ class _PersonelRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isYonetici = personel.rol == 'yonetici';
-    return Material(
-      color: AppColors.surfaceTint,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: onTap,
+    final isPasif = !personel.aktif;
+    return Opacity(
+      opacity: isPasif ? 0.55 : 1,
+      child: Material(
+        color: AppColors.surfaceTint,
         borderRadius: BorderRadius.circular(14),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: AppColors.onvoBlue.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  _initialsOf(personel.adSoyad),
-                  style: AppText.label
-                      .copyWith(color: AppColors.onvoBlue, fontSize: 13),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(personel.adSoyad, style: AppText.label),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${personel.sicilNo} · ${personel.birim} · ${personel.bant}',
-                      style: AppText.footer,
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: isYonetici
-                      ? AppColors.amber.withOpacity(0.15)
-                      : AppColors.onvoBlue.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  _rolLabel(personel.rol),
-                  style: AppText.footer.copyWith(
-                    color:
-                        isYonetici ? AppColors.amberDark : AppColors.onvoBlue,
-                    fontWeight: FontWeight.w600,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: AppColors.onvoBlue.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    _initialsOf(personel.adSoyad),
+                    style: AppText.label
+                        .copyWith(color: AppColors.onvoBlue, fontSize: 13),
                   ),
                 ),
-              ),
-              const SizedBox(width: 4),
-              const Icon(Icons.chevron_right_rounded,
-                  color: AppColors.muted, size: 20),
-            ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                              child:
+                                  Text(personel.adSoyad, style: AppText.label)),
+                          if (isPasif) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppColors.muted.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                'Silindi',
+                                style: AppText.footer.copyWith(
+                                  color: AppColors.muted,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${personel.sicilNo} · ${personel.birim} · ${personel.bant}',
+                        style: AppText.footer,
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: isYonetici
+                        ? AppColors.amber.withOpacity(0.15)
+                        : AppColors.onvoBlue.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    _rolLabel(personel.rol),
+                    style: AppText.footer.copyWith(
+                      color:
+                          isYonetici ? AppColors.amberDark : AppColors.onvoBlue,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                const Icon(Icons.chevron_right_rounded,
+                    color: AppColors.muted, size: 20),
+              ],
+            ),
           ),
         ),
       ),
@@ -998,14 +1122,22 @@ class _EditPersonelSheetState extends State<_EditPersonelSheet> {
   static const _roller = ['calisan', 'bant_sefi', 'yonetici'];
 
   late final TextEditingController _nameController;
+  late final TextEditingController _emailController;
+  late final TextEditingController _servisController;
   late String _selectedBirim;
   late String _selectedBant;
   late String _selectedRol;
+  bool _isTogglingAktif = false;
+  String? _toggleAktifHata;
 
   @override
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.personel.adSoyad);
+    _emailController =
+        TextEditingController(text: widget.personel.email ?? '');
+    _servisController =
+        TextEditingController(text: widget.personel.servisNo ?? '');
     _selectedBirim = widget.personel.birim;
     _selectedBant = widget.personel.bant;
     _selectedRol = widget.personel.rol;
@@ -1014,6 +1146,8 @@ class _EditPersonelSheetState extends State<_EditPersonelSheet> {
   @override
   void dispose() {
     _nameController.dispose();
+    _emailController.dispose();
+    _servisController.dispose();
     super.dispose();
   }
 
@@ -1023,6 +1157,48 @@ class _EditPersonelSheetState extends State<_EditPersonelSheet> {
       orElse: () => widget.birimler.first,
     );
     return birim.bants;
+  }
+
+  Future<void> _handleSilPersonel() async {
+    final onaylandi = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Personeli sil'),
+        content: Text(
+          '${widget.personel.adSoyad} adlı personeli silmek istediğinize '
+          'emin misiniz? Bu kişi artık listede görünmeyecek ve QR ile '
+          'giriş/çıkış kaydı oluşturamayacak. Geçmiş kayıtları korunur.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Vazgeç'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Sil', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (onaylandi != true || !mounted) return;
+
+    setState(() {
+      _isTogglingAktif = true;
+      _toggleAktifHata = null;
+    });
+    try {
+      await context.read<AppData>().togglePersonelAktif(widget.personel);
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isTogglingAktif = false;
+          _toggleAktifHata = e.toString().replaceFirst('ScanException: ', '');
+        });
+      }
+    }
   }
 
   @override
@@ -1063,6 +1239,16 @@ class _EditPersonelSheetState extends State<_EditPersonelSheet> {
             const SizedBox(height: 6),
             TextField(
                 controller: _nameController, decoration: _fieldDecoration()),
+            const SizedBox(height: 14),
+            Text('E-posta (opsiyonel)', style: AppText.label),
+            const SizedBox(height: 6),
+            TextField(
+                controller: _emailController, decoration: _fieldDecoration()),
+            const SizedBox(height: 14),
+            Text('Servis No (opsiyonel)', style: AppText.label),
+            const SizedBox(height: 6),
+            TextField(
+                controller: _servisController, decoration: _fieldDecoration()),
             const SizedBox(height: 14),
             Text('Birim', style: AppText.label),
             const SizedBox(height: 6),
@@ -1129,10 +1315,40 @@ class _EditPersonelSheetState extends State<_EditPersonelSheet> {
                     birim: _selectedBirim,
                     bant: effectiveBant,
                     rol: _selectedRol,
+                    email: _emailController.text.trim().isEmpty
+                        ? null
+                        : _emailController.text.trim(),
+                    servisNo: _servisController.text.trim().isEmpty
+                        ? null
+                        : _servisController.text.trim(),
                   ),
                 );
               },
             ),
+            const SizedBox(height: 10),
+            if (widget.personel.aktif) ...[
+              if (_toggleAktifHata != null) ...[
+                Text(_toggleAktifHata!, style: AppText.errorMsg),
+                const SizedBox(height: 8),
+              ],
+              OutlinedButton.icon(
+                onPressed: _isTogglingAktif ? null : _handleSilPersonel,
+                icon: Icon(
+                  Icons.delete_outline_rounded,
+                  color: Colors.red,
+                ),
+                label: Text(
+                  _isTogglingAktif ? 'İşleniyor...' : 'Personeli Sil',
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.red,
+                  side: const BorderSide(color: Colors.red),
+                  minimumSize: const Size.fromHeight(50),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                ),
+              ),
+            ],
           ],
         ),
       ),
